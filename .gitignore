@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 项目特定
+temp/
+output/
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+*.mkv
+
+# 测试临时文件
+test/test_audio_temp/
+test_sample.mp4
+test_*.mp4
+test_*.mp3
+test_*.wav
+.coverage
+htmlcov/
+*.pyc
+__pycache__/
+
+# 环境变量
+.env
+.env.local
+
+# 日志
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
