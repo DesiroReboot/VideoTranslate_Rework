@@ -11,11 +11,14 @@ from typing import Optional, Dict, Any
 import dashscope
 from openai import OpenAI
 from config import (
-    DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL,
+    DASHSCOPE_API_KEY, 
+    DASHSCOPE_BASE_URL,
+    # test_api_key,
     ASR_MODEL, MT_MODEL, TTS_MODEL,
     TTS_VOICE_MAP, DEFAULT_VOICE,
     TEMP_DIR, load_translation_prompt
 )
+#from dashscope.audio.asr import Recognition
 
 
 class AIServices:
@@ -23,11 +26,13 @@ class AIServices:
     
     def __init__(self):
         """初始化AI服务"""
+        #from config import DASHSCOPE_API_KEY
         if not DASHSCOPE_API_KEY:
             raise ValueError("未配置DASHSCOPE_API_KEY,请在环境变量中设置")
         
         # 设置DashScope配置
         dashscope.api_key = DASHSCOPE_API_KEY
+        print(f"DEBUG: DASHSCOPE_API_KEY = {repr(dashscope.api_key)}")
         dashscope.base_http_api_url = f"{DASHSCOPE_BASE_URL}/api/v1"
         
         # 初始化OpenAI客户端(用于调用Qwen兼容接口)

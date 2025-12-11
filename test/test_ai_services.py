@@ -6,17 +6,32 @@ AI服务模块单元测试
 import unittest
 import os
 import sys
+import importlib
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock, mock_open
+#from config import test_api_key
 
 # 添加父目录到路径以导入模块
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ai_services import AIServices
-
+import ai_services
 
 class TestAIServicesInit(unittest.TestCase):
     """AIServices初始化测试"""
+    
+    # @classmethod
+    # def setUpClass(cls):
+    #     """在所有测试方法之前设置环境变量"""
+    #     super().setUpClass()
+    #     os.environ['DASHSCOPE_API_KEY'] = 'test_api_key'
+    
+    # @classmethod
+    # def tearDownClass(cls):
+    #     """在所有测试方法之后清理环境变量"""
+    #     super().tearDownClass()
+    #     if 'DASHSCOPE_API_KEY' in os.environ:
+    #         del os.environ['DASHSCOPE_API_KEY']
     
     @patch.dict(os.environ, {'DASHSCOPE_API_KEY': 'test_api_key'})
     @patch('ai_services.dashscope')
@@ -24,6 +39,9 @@ class TestAIServicesInit(unittest.TestCase):
     def test_init_success(self, mock_openai, mock_dashscope):
         """测试成功初始化"""
         # 创建AIServices实例
+        # importlib.reload(ai_services)
+        # from ai_services import AIServices
+
         ai = AIServices()
         
         # 验证DashScope配置
@@ -186,6 +204,7 @@ class TestAIServicesTTS(unittest.TestCase):
     @patch('ai_services.AIServices._download_file')
     def test_text_to_speech_success(self, mock_download):
         """测试成功合成语音"""
+        mock_download.return_value = None
         # Mock TTS响应
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -209,6 +228,7 @@ class TestAIServicesTTS(unittest.TestCase):
     @patch('ai_services.AIServices._download_file')
     def test_text_to_speech_custom_voice(self, mock_download):
         """测试自定义音色"""
+        mock_download.return_value = None
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.output.audio.url = "https://example.com/audio.wav"
@@ -231,6 +251,7 @@ class TestAIServicesTTS(unittest.TestCase):
     @patch('ai_services.TTS_VOICE_MAP', {'English': 'Emily'})
     @patch('ai_services.AIServices._download_file')
     def test_text_to_speech_auto_voice_selection(self, mock_download):
+        mock_download.return_value = None
         """测试自动选择音色"""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -289,7 +310,7 @@ class TestAIServicesASR(unittest.TestCase):
         self.openai_patcher.stop()
     
     @patch('builtins.open', new_callable=mock_open, read_data=b'fake_audio_data')
-    @patch('ai_services.Recognition')
+    @patch('dashscope.audio.asr.Recognition')
     def test_speech_to_text_success(self, mock_recognition, mock_file):
         """测试成功识别语音"""
         # Mock识别响应
@@ -308,7 +329,7 @@ class TestAIServicesASR(unittest.TestCase):
         self.assertEqual(result, '今天天气真好')
     
     @patch('builtins.open', new_callable=mock_open, read_data=b'fake_audio_data')
-    @patch('ai_services.Recognition')
+    @patch('dashscope.audio.asr.Recognition')
     def test_speech_to_text_with_results_array(self, mock_recognition, mock_file):
         """测试从results数组提取文本"""
         # Mock识别响应 (文本在results中)
@@ -334,7 +355,7 @@ class TestAIServicesASR(unittest.TestCase):
         self.assertEqual(result, '今天 天气 真好')
     
     @patch('builtins.open', new_callable=mock_open, read_data=b'fake_audio_data')
-    @patch('ai_services.Recognition')
+    @patch('dashscope.audio.asr.Recognition')
     def test_speech_to_text_api_error(self, mock_recognition, mock_file):
         """测试API错误返回测试文本"""
         # Mock识别失败
