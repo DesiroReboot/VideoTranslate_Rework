@@ -18,7 +18,43 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class TestAIServicesInit(unittest.TestCase):
     """AIServices初始化测试"""
-    
+
+    def _get_ai_services_with_mocks(self, api_key='test_api_key'):
+        """辅助方法：获取AIServices实例，处理mock和模块重载"""
+        with patch.dict(os.environ, {'DASHSCOPE_API_KEY': api_key}):
+            # 在环境变量设置后重新导入相关模块
+            import importlib
+            import config
+            importlib.reload(config)
+            if 'ai_services' in sys.modules:
+                importlib.reload(sys.modules['ai_services'])
+
+            from ai_services import AIServices
+
+            with patch('ai_services.dashscope') as mock_dashscope:
+                with patch('ai_services.OpenAI') as mock_openai:
+                    ai = AIServices()
+                    return ai, mock_dashscope, mock_openai
+
+    def _get_ai_services_without_api_key(self):
+        """辅助方法：获取AIServices实例（无API key），处理模块重载"""
+        # 临时保存并删除API key
+        original_key = os.environ.pop('DASHSCOPE_API_KEY', None)
+        try:
+            # 在环境变量删除后重新导入模块
+            import importlib
+            import config
+            importlib.reload(config)
+            if 'ai_services' in sys.modules:
+                importlib.reload(sys.modules['ai_services'])
+
+            from ai_services import AIServices
+            return AIServices
+        finally:
+            # 恢复原始环境变量
+            if original_key is not None:
+                os.environ['DASHSCOPE_API_KEY'] = original_key
+
     # @classmethod
     # def setUpClass(cls):
     #     """在所有测试方法之前设置环境变量"""
@@ -34,49 +70,22 @@ class TestAIServicesInit(unittest.TestCase):
     
     def test_init_success(self):
         """测试成功初始化"""
-        # 先设置环境变量
-        with patch.dict(os.environ, {'DASHSCOPE_API_KEY': 'test_api_key'}):
-            # 在环境变量设置后重新导入相关模块
-            import importlib
-            import config
-            importlib.reload(config)
-            if 'ai_services' in sys.modules:
-                importlib.reload(sys.modules['ai_services'])
+        ai, mock_dashscope, mock_openai = self._get_ai_services_with_mocks()
 
-            from ai_services import AIServices
+        # 验证DashScope配置
+        self.assertEqual(mock_dashscope.api_key, 'test_api_key')
 
-            with patch('ai_services.dashscope') as mock_dashscope:
-                with patch('ai_services.OpenAI') as mock_openai:
-                    ai = AIServices()
-
-                    # 验证DashScope配置
-                    self.assertEqual(mock_dashscope.api_key, 'test_api_key')
-
-                    # 验证OpenAI客户端创建
-                    mock_openai.assert_called_once()
+        # 验证OpenAI客户端创建
+        mock_openai.assert_called_once()
     
     def test_init_no_api_key(self):
         """测试缺少API Key"""
-        # 临时保存并删除API key
-        original_key = os.environ.pop('DASHSCOPE_API_KEY', None)
-        try:
-            # 在环境变量删除后重新导入模块
-            import importlib
-            import config
-            importlib.reload(config)
-            if 'ai_services' in sys.modules:
-                importlib.reload(sys.modules['ai_services'])
+        AIServices = self._get_ai_services_without_api_key()
 
-            from ai_services import AIServices
+        with self.assertRaises(ValueError) as context:
+            AIServices()
 
-            with self.assertRaises(ValueError) as context:
-                AIServices()
-
-            self.assertIn("未配置DASHSCOPE_API_KEY", str(context.exception))
-        finally:
-            # 恢复原始环境变量
-            if original_key is not None:
-                os.environ['DASHSCOPE_API_KEY'] = original_key
+        self.assertIn("未配置DASHSCOPE_API_KEY", str(context.exception))
 
 
 class TestAIServicesTranslation(unittest.TestCase):
@@ -399,13 +408,16 @@ class TestAIServicesASR(unittest.TestCase):
 
 class TestAIServicesHelpers(unittest.TestCase):
     """辅助方法测试"""
-    # from ai_services import AIServices
+
+    @classmethod
+    def setUpClass(cls):
+        """类级别设置"""
+        from ai_services import AIServices
+        cls.AIServices = AIServices
 
     @patch('ai_services.requests.get')
     def test_download_file_success(self, mock_get):
         """测试文件下载成功"""
-        from ai_services import AIServices
-
         # Mock HTTP响应
         mock_response = MagicMock()
         mock_response.iter_content = MagicMock(
@@ -419,7 +431,7 @@ class TestAIServicesHelpers(unittest.TestCase):
         try:
             # 执行下载
             with patch('builtins.open', mock_open()) as mock_file:
-                AIServices._download_file("https://example.com/audio.wav", output_path)
+                self.AIServices._download_file("https://example.com/audio.wav", output_path)
                 
                 # 验证写入
                 mock_file.assert_called_once_with(output_path, 'wb')
@@ -431,19 +443,16 @@ class TestAIServicesHelpers(unittest.TestCase):
     @patch('ai_services.requests.get')
     def test_download_file_http_error(self, mock_get):
         """测试HTTP错误"""
-        from ai_services import AIServices
         # Mock HTTP错误
         mock_get.side_effect = Exception("HTTP错误")
-        
+
         with self.assertRaises(Exception):
-            AIServices._download_file("https://example.com/audio.wav", "output.wav")
+            self.AIServices._download_file("https://example.com/audio.wav", "output.wav")
     
     def test_upload_to_oss_not_implemented(self):
         """测试OSS上传未实现"""
-        from ai_services import AIServices
-
         with self.assertRaises(NotImplementedError) as context:
-            AIServices._upload_to_oss("test.mp3")
+            self.AIServices._upload_to_oss("test.mp3")
         
         self.assertIn("配置阿里云OSS", str(context.exception))
 
@@ -456,12 +465,12 @@ class TestAIServicesIntegration(unittest.TestCase):
         "跳过集成测试,需要设置RUN_INTEGRATION_TESTS=1和DASHSCOPE_API_KEY"
     )
     def test_translate_real_text(self):
-        from ai_services import AIServices
+        #from ai_services import AIServices
         """
         集成测试: 真实翻译
         需要: RUN_INTEGRATION_TESTS=1 和有效的 DASHSCOPE_API_KEY
         """
-        ai = AIServices()
+        ai = self.AIServices()
         
         test_text = "今天天气真好,我们一起去公园散步吧。"
         print(f"\n原文: {test_text}")
@@ -483,12 +492,12 @@ class TestAIServicesIntegration(unittest.TestCase):
         "跳过集成测试,需要设置RUN_INTEGRATION_TESTS=1和DASHSCOPE_API_KEY"
     )
     def test_tts_real_synthesis(self):
-        from ai_services import AIServices
+        #from ai_services import AIServices
         """
         集成测试: 真实语音合成
         需要: RUN_INTEGRATION_TESTS=1 和有效的 DASHSCOPE_API_KEY
         """
-        ai = AIServices()
+        ai = self.AIServices()
         
         test_text = "Hello, this is a test."
         print(f"\n合成文本: {test_text}")
