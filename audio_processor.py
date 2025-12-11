@@ -16,25 +16,29 @@ class AudioProcessor:
     def extract_audio(video_path: str, output_audio_path: Optional[str] = None) -> str:
         """
         从视频中提取音频
-        
+
         Args:
             video_path: 视频文件路径
             output_audio_path: 输出音频路径,不指定则自动生成
-            
+
         Returns:
             提取的音频文件路径
-            
+
         Raises:
             Exception: 提取失败
         """
         print(f"正在从视频中提取音频: {video_path}")
-        
+
         try:
+            # 检查输入参数
+            if not video_path or not video_path.strip():
+                raise ValueError("视频文件路径不能为空")
             # 加载视频
             video = VideoFileClip(video_path)
             
             # 检查是否有音频
             if video.audio is None:
+                video.close()
                 raise ValueError("视频中没有音频轨道")
             
             # 生成输出路径

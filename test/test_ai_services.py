@@ -14,8 +14,7 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 # 添加父目录到路径以导入模块
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ai_services import AIServices
-import ai_services
+# 不在这里全局导入AIServices，避免提前初始化
 
 class TestAIServicesInit(unittest.TestCase):
     """AIServices初始化测试"""
@@ -33,30 +32,51 @@ class TestAIServicesInit(unittest.TestCase):
     #     if 'DASHSCOPE_API_KEY' in os.environ:
     #         del os.environ['DASHSCOPE_API_KEY']
     
-    @patch.dict(os.environ, {'DASHSCOPE_API_KEY': 'test_api_key'})
-    @patch('ai_services.dashscope')
-    @patch('ai_services.OpenAI')
-    def test_init_success(self, mock_openai, mock_dashscope):
+    def test_init_success(self):
         """测试成功初始化"""
-        # 创建AIServices实例
-        # importlib.reload(ai_services)
-        # from ai_services import AIServices
+        # 先设置环境变量
+        with patch.dict(os.environ, {'DASHSCOPE_API_KEY': 'test_api_key'}):
+            # 在环境变量设置后重新导入相关模块
+            import importlib
+            import config
+            importlib.reload(config)
+            if 'ai_services' in sys.modules:
+                importlib.reload(sys.modules['ai_services'])
 
-        ai = AIServices()
-        
-        # 验证DashScope配置
-        self.assertEqual(mock_dashscope.api_key, 'test_api_key')
-        
-        # 验证OpenAI客户端创建
-        mock_openai.assert_called_once()
+            from ai_services import AIServices
+
+            with patch('ai_services.dashscope') as mock_dashscope:
+                with patch('ai_services.OpenAI') as mock_openai:
+                    ai = AIServices()
+
+                    # 验证DashScope配置
+                    self.assertEqual(mock_dashscope.api_key, 'test_api_key')
+
+                    # 验证OpenAI客户端创建
+                    mock_openai.assert_called_once()
     
-    @patch.dict(os.environ, {}, clear=True)
     def test_init_no_api_key(self):
         """测试缺少API Key"""
-        with self.assertRaises(ValueError) as context:
-            AIServices()
-        
-        self.assertIn("未配置DASHSCOPE_API_KEY", str(context.exception))
+        # 临时保存并删除API key
+        original_key = os.environ.pop('DASHSCOPE_API_KEY', None)
+        try:
+            # 在环境变量删除后重新导入模块
+            import importlib
+            import config
+            importlib.reload(config)
+            if 'ai_services' in sys.modules:
+                importlib.reload(sys.modules['ai_services'])
+
+            from ai_services import AIServices
+
+            with self.assertRaises(ValueError) as context:
+                AIServices()
+
+            self.assertIn("未配置DASHSCOPE_API_KEY", str(context.exception))
+        finally:
+            # 恢复原始环境变量
+            if original_key is not None:
+                os.environ['DASHSCOPE_API_KEY'] = original_key
 
 
 class TestAIServicesTranslation(unittest.TestCase):
@@ -73,8 +93,9 @@ class TestAIServicesTranslation(unittest.TestCase):
         
         self.mock_dashscope = self.dashscope_patcher.start()
         self.mock_openai = self.openai_patcher.start()
-        
-        # 创建AIServices实例
+
+        # 在mock之后导入并创建AIServices实例
+        from ai_services import AIServices
         self.ai_services = AIServices()
     
     def tearDown(self):
@@ -192,7 +213,9 @@ class TestAIServicesTTS(unittest.TestCase):
         
         self.mock_dashscope = self.dashscope_patcher.start()
         self.mock_openai = self.openai_patcher.start()
-        
+
+        # 在mock之后导入并创建AIServices实例
+        from ai_services import AIServices
         self.ai_services = AIServices()
     
     def tearDown(self):
@@ -300,7 +323,9 @@ class TestAIServicesASR(unittest.TestCase):
         
         self.mock_dashscope = self.dashscope_patcher.start()
         self.mock_openai = self.openai_patcher.start()
-        
+
+        # 在mock之后导入并创建AIServices实例
+        from ai_services import AIServices
         self.ai_services = AIServices()
     
     def tearDown(self):
@@ -378,16 +403,18 @@ class TestAIServicesHelpers(unittest.TestCase):
     @patch('ai_services.requests.get')
     def test_download_file_success(self, mock_get):
         """测试文件下载成功"""
+        from ai_services import AIServices
+
         # Mock HTTP响应
         mock_response = MagicMock()
         mock_response.iter_content = MagicMock(
             return_value=[b'chunk1', b'chunk2']
         )
         mock_get.return_value = mock_response
-        
+
         # 创建临时输出路径
         output_path = "test_download.wav"
-        
+
         try:
             # 执行下载
             with patch('builtins.open', mock_open()) as mock_file:
@@ -411,6 +438,8 @@ class TestAIServicesHelpers(unittest.TestCase):
     
     def test_upload_to_oss_not_implemented(self):
         """测试OSS上传未实现"""
+        from ai_services import AIServices
+
         with self.assertRaises(NotImplementedError) as context:
             AIServices._upload_to_oss("test.mp3")
         

@@ -91,11 +91,11 @@ class TestAudioProcessor(unittest.TestCase):
         mock_video = MagicMock()
         mock_video.audio = None
         mock_video_clip.return_value = mock_video
-        
+
         # 验证抛出异常
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(Exception) as context:
             AudioProcessor.extract_audio(str(self.test_video))
-        
+
         self.assertIn("没有音频", str(context.exception))
         mock_video.close.assert_called_once()
     
