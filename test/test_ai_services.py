@@ -399,7 +399,8 @@ class TestAIServicesASR(unittest.TestCase):
 
 class TestAIServicesHelpers(unittest.TestCase):
     """辅助方法测试"""
-    
+    # from ai_services import AIServices
+
     @patch('ai_services.requests.get')
     def test_download_file_success(self, mock_get):
         """测试文件下载成功"""
@@ -430,6 +431,7 @@ class TestAIServicesHelpers(unittest.TestCase):
     @patch('ai_services.requests.get')
     def test_download_file_http_error(self, mock_get):
         """测试HTTP错误"""
+        from ai_services import AIServices
         # Mock HTTP错误
         mock_get.side_effect = Exception("HTTP错误")
         
@@ -448,12 +450,13 @@ class TestAIServicesHelpers(unittest.TestCase):
 
 class TestAIServicesIntegration(unittest.TestCase):
     """AIServices集成测试"""
-    
+    # from ai_services import AIServices
     @unittest.skipUnless(
         os.getenv("RUN_INTEGRATION_TESTS") and os.getenv("DASHSCOPE_API_KEY"),
         "跳过集成测试,需要设置RUN_INTEGRATION_TESTS=1和DASHSCOPE_API_KEY"
     )
     def test_translate_real_text(self):
+        from ai_services import AIServices
         """
         集成测试: 真实翻译
         需要: RUN_INTEGRATION_TESTS=1 和有效的 DASHSCOPE_API_KEY
@@ -480,6 +483,7 @@ class TestAIServicesIntegration(unittest.TestCase):
         "跳过集成测试,需要设置RUN_INTEGRATION_TESTS=1和DASHSCOPE_API_KEY"
     )
     def test_tts_real_synthesis(self):
+        from ai_services import AIServices
         """
         集成测试: 真实语音合成
         需要: RUN_INTEGRATION_TESTS=1 和有效的 DASHSCOPE_API_KEY

@@ -5,24 +5,29 @@
 import sys
 import unittest
 from pathlib import Path
+import importlib 
 
 
 def run_all_tests(verbose=2):
     """
     运行所有测试
-    
+
     Args:
         verbose: 详细程度 (0=静默, 1=正常, 2=详细)
-    
+
     Returns:
         bool: 是否所有测试都通过
     """
+    # 添加项目根目录到路径，确保能导入test模块
+    project_root = Path(__file__).parent
+    sys.path.insert(0, str(project_root))
+
     # 创建测试加载器
     loader = unittest.TestLoader()
-    
+
     # 创建测试套件
     suite = unittest.TestSuite()
-    
+
     # 测试模块列表 (在test目录下)
     test_modules = [
         'test.test_video_downloader',
@@ -39,10 +44,12 @@ def run_all_tests(verbose=2):
     for module_name in test_modules:
         try:
             print(f"加载测试模块: {module_name}")
-            module = __import__(module_name)
-            suite.addTests(loader.loadTestsFromModule(module))
+            module = importlib.import_module(module_name)
+            loaded_tests = loader.loadTestsFromModule(module)
+            print(f"加载了 {loaded_tests.countTestCases()} 个测试")
+            suite.addTests(loaded_tests)
         except ImportError as e:
-            print(f"✗ 无法加载 {module_name}: {e}")
+            print(f"无法加载 {module_name}: {e}")
             continue
     
     print()
