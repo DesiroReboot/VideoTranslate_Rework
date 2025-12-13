@@ -50,7 +50,7 @@ class AudioProcessor:
             video.audio.write_audiofile(
                 output_audio_path,
                 codec='libmp3lame' if AUDIO_FORMAT == 'mp3' else None,
-                verbose=False,
+                #verbose=False,
                 logger=None
             )
             

@@ -128,15 +128,20 @@ class AIServices:
         """
         print(f"\n[翻译] 开始翻译到 {target_language}")
         print(f"[翻译] 原文长度: {len(text)} 字符")
+        #print(f"[翻译]原文：{text}")
         
         try:
             # 加载系统提示词
             system_prompt = load_translation_prompt(target_language)
+            #print(f"[翻译]system prompt:{system_prompt}")
+            user_content = f"{system_prompt}\n\n{text}"
+            print(f"[翻译]user context:{user_content}")
             
             # 构建消息
             messages = [
-                {"role": "system", "content": system_prompt},
+                # {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
+                #{"role": "user", "content": user_content}
             ]
             
             # 调用Qwen-MT API
