@@ -26,6 +26,9 @@ TTS_MODEL = "qwen3-tts-flash"  # 49种音色,支持多语言
 
 # OSS
 OSS_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com"
+OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID")
+OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET")
+OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME")
 
 # ==================== TTS音色配置 ====================
 # 根据目标语言自动选择合适音色

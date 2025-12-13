@@ -9,6 +9,9 @@ import sys
 import importlib
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock, mock_open
+from tempfile import NamedTemporaryFile
+
+from config import PROJECT_ROOT
 #from config import test_api_key
 
 # 添加父目录到路径以导入模块
@@ -457,10 +460,21 @@ class TestAIServicesHelpers(unittest.TestCase):
     
     def test_upload_to_oss_not_implemented(self):
         """测试OSS上传未实现"""
-        with self.assertRaises(NotImplementedError) as context:
-            self.AIServices._upload_to_oss("test.mp3")
+        # with self.assertRaises(NotImplementedError) as context:
+        #     self.AIServices._upload_to_oss("test.mp3")
         
-        self.assertIn("配置阿里云OSS", str(context.exception))
+        # self.assertIn("配置阿里云OSS", str(context.exception))
+        with NamedTemporaryFile(dir=PROJECT_ROOT/ "temp", suffix=".mp3", delete=False) as tmp:
+            test_file = tmp.name
+    
+        try:
+            with self.assertRaises(ValueError) as context:
+                self.AIServices._upload_to_oss(test_file)  # ✅ 文件真实存在
+                #self.AIServices._upload_to_oss("dummy")
+        
+            self.assertIn("OSS", str(context.exception))
+        finally:
+            os.unlink(test_file)  # 确保删除临时文件
 
 
 class TestAIServicesIntegration(unittest.TestCase):

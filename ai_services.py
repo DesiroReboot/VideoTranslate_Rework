@@ -17,7 +17,8 @@ from config import (
     ASR_MODEL, MT_MODEL, TTS_MODEL,
     TTS_VOICE_MAP, DEFAULT_VOICE,
     TEMP_DIR, load_translation_prompt,
-    OSS_ENDPOINT,PROJECT_ROOT
+    OSS_ENDPOINT,PROJECT_ROOT,
+    OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
 )
 #from dashscope.audio.asr import Recognition
 
@@ -265,18 +266,19 @@ class AIServices:
         # result = bucket.put_object_from_file(object_name, file_path)
         # return f"https://{bucket_name}.{endpoint}/{object_name}"
         # 从环境变量获取安全凭证（推荐！）   
-        access_key_id = os.getenv("OSS_ACCESS_KEY_ID")
-        access_key_secret = os.getenv("OSS_ACCESS_KEY_SECRET")
-        bucket_name = os.getenv("OSS_BUCKET_NAME")
+        # access_key_id = os.getenv("OSS_ACCESS_KEY_ID")
+        # access_key_secret = os.getenv("OSS_ACCESS_KEY_SECRET")
+        # oss_bucket_name = os.getenv("OSS_BUCKET_NAME")
         #endpoint = os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")  # 默认杭州
         #endpoint = os.getenv("OSS_ENDPOINT")
-        endpoint = OSS_ENDPOINT
+        # endpoint = OSS_ENDPOINT
 
     # 验证环境变量是否设置
         required_vars={
-            "ACCESS_KEY_ID": access_key_id,
-            "ACCESS_KEY_SECRET": access_key_secret,
-            "BUCKET_NAME": bucket_name
+            "ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
+            "ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
+            "OSS_BUCKET_NAME": OSS_BUCKET_NAME
+            #OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME,OSS_ENDPOINT
         }
         missing_vars = [name for name, value in required_vars.items() if not value]
     
@@ -286,8 +288,8 @@ class AIServices:
         )
 
     # 初始化OSS客户端
-        auth = oss2.Auth(access_key_id, access_key_secret)
-        bucket = oss2.Bucket(auth, endpoint, bucket_name)
+        auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+        bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
 
     # 上传文件
         if file_path:
@@ -304,10 +306,10 @@ class AIServices:
         expires=expiration
     )
         
-        raise NotImplementedError(
-            "需要配置阿里云OSS用于音频上传\n"
-            "请参考文档: https://help.aliyun.com/document_detail/32026.html"
-        )
+        # raise NotImplementedError(
+        #     "需要配置阿里云OSS用于音频上传\n"
+        #     "请参考文档: https://help.aliyun.com/document_detail/32026.html"
+        # )
 
     # @staticmethod
     # def _get_signed_url(object_name, expiration=3600):
