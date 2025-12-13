@@ -16,7 +16,8 @@ from config import (
     # test_api_key,
     ASR_MODEL, MT_MODEL, TTS_MODEL,
     TTS_VOICE_MAP, DEFAULT_VOICE,
-    TEMP_DIR, load_translation_prompt
+    TEMP_DIR, load_translation_prompt,
+    OSS_ENDPOINT,PROJECT_ROOT
 )
 #from dashscope.audio.asr import Recognition
 
@@ -135,7 +136,7 @@ class AIServices:
             system_prompt = load_translation_prompt(target_language)
             #print(f"[翻译]system prompt:{system_prompt}")
             user_content = f"{system_prompt}\n\n{text}"
-            print(f"[翻译]user context:{user_content}")
+            #print(f"[翻译]user context:{user_content}")
             
             # 构建消息
             messages = [
@@ -241,7 +242,7 @@ class AIServices:
                 f.write(chunk)
     
     @staticmethod
-    def _upload_to_oss(file_path: str) -> str:
+    def _upload_to_oss(file_path: str,  expiration=3600) -> str:
         """
         上传文件到阿里云OSS (待实现)
         
@@ -258,14 +259,77 @@ class AIServices:
             3. 上传文件并返回公网URL
         """
         # TODO: 实现OSS上传
-        # import oss2
+        import oss2
         # auth = oss2.Auth(access_key_id, access_key_secret)
         # bucket = oss2.Bucket(auth, endpoint, bucket_name)
         # result = bucket.put_object_from_file(object_name, file_path)
         # return f"https://{bucket_name}.{endpoint}/{object_name}"
+        # 从环境变量获取安全凭证（推荐！）   
+        access_key_id = os.getenv("OSS_ACCESS_KEY_ID")
+        access_key_secret = os.getenv("OSS_ACCESS_KEY_SECRET")
+        bucket_name = os.getenv("OSS_BUCKET_NAME")
+        #endpoint = os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")  # 默认杭州
+        #endpoint = os.getenv("OSS_ENDPOINT")
+        endpoint = OSS_ENDPOINT
+
+    # 验证环境变量是否设置
+        required_vars={
+            "ACCESS_KEY_ID": access_key_id,
+            "ACCESS_KEY_SECRET": access_key_secret,
+            "BUCKET_NAME": bucket_name
+        }
+        missing_vars = [name for name, value in required_vars.items() if not value]
+    
+        if missing_vars:
+            raise ValueError(
+                f"Missing required OSS environment variables: {', '.join(missing_vars)}"
+        )
+
+    # 初始化OSS客户端
+        auth = oss2.Auth(access_key_id, access_key_secret)
+        bucket = oss2.Bucket(auth, endpoint, bucket_name)
+
+    # 上传文件
+        if file_path:
+            relative_path = os.path.relpath(file_path, PROJECT_ROOT)
+            object_name = relative_path.replace("\\", "/")
+        bucket.put_object_from_file(object_name, file_path)
+    
+    # 返回可公开访问的URL（注意：Bucket必须是Public Read才能直接访问）
+    # 如果Bucket是Private，需生成签名URL（见下文）
+        #return f"https://{bucket_name}.{endpoint}/{object_name}"
+        return bucket.sign_url(
+        method='GET',
+        key=object_name,
+        expires=expiration
+    )
         
         raise NotImplementedError(
             "需要配置阿里云OSS用于音频上传\n"
             "请参考文档: https://help.aliyun.com/document_detail/32026.html"
         )
 
+    # @staticmethod
+    # def _get_signed_url(object_name, expiration=3600):
+    # # 生成3600秒有效期的临时访问链接
+    # url = bucket.sign_url(
+    #     method='GET',
+    #     key=object_name,
+    #     expires=expiration
+    # )
+    # return url
+    # @staticmethod
+    # def check_oss_env_vars():
+    # #检查必要的 OSS 环境变量是否已设置
+    #     required_vars = {
+    #     "OSS_ACCESS_KEY_ID": os.getenv("OSS_ACCESS_KEY_ID"),
+    #     "OSS_ACCESS_KEY_SECRET": os.getenv("OSS_ACCESS_KEY_SECRET"),
+    #     "OSS_BUCKET_NAME": os.getenv("OSS_BUCKET_NAME")
+    #     }
+
+    #     missing_vars = [name for name, value in required_vars.items() if not value]
+    
+    #     if missing_vars:
+    #         raise ValueError(
+    #             f"Missing required OSS environment variables: {', '.join(missing_vars)}"
+    #     )

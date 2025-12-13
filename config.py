@@ -24,19 +24,22 @@ MT_MODEL = "qwen-mt-plus"  # 高质量翻译,支持92种语言
 # 语音合成模型 (TTS)
 TTS_MODEL = "qwen3-tts-flash"  # 49种音色,支持多语言
 
+# OSS
+OSS_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com"
+
 # ==================== TTS音色配置 ====================
 # 根据目标语言自动选择合适音色
 TTS_VOICE_MAP = {
-    "Chinese": "Cherry",        # 中文女声
-    "English": "Emily",         # 英文女声
-    "Japanese": "Yuki",         # 日文女声
-    "Korean": "Seoyeon",        # 韩文女声
-    "Spanish": "Sofia",         # 西班牙文女声
-    "French": "Amelie",         # 法文女声
-    "German": "Hanna",          # 德文女声
-    "Russian": "Daria",         # 俄文女声
-    "Italian": "Giulia",        # 意大利文女声
-    "Portuguese": "Camila",     # 葡萄牙文女声
+    "Chinese": "Cherry",        # ✅ 阿里云标准名称（中文女声）
+    "English": "Cherry",           # ✅ 阿里云标准名称（英文女声）
+    "Japanese": "Cherry",        # ✅ 阿里云标准名称（日文女声）
+    "Korean": "Cherry",          # ✅ 阿里云标准名称（韩文女声）
+    "Spanish": "Cherry",         # ✅ 阿里云标准名称（西班牙语女声）
+    "French": "Cherry",          # ✅ 阿里云标准名称（法语女声）
+    "German": "Cherry",           # ✅ 阿里云标准名称（德文女声）
+    "Russian": "Cherry",          # ✅ 阿里云标准名称（俄文女声）
+    "Italian": "Cherry",         # ✅ 阿里云标准名称（意大利语女声）
+    "Portuguese": "Cherry",      # ✅ 阿里云标准名称（葡萄牙语女声）
 }
 
 DEFAULT_VOICE = "Cherry"  # 默认音色

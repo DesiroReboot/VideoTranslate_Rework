@@ -205,8 +205,14 @@ class TestAIServicesTranslation(unittest.TestCase):
         # 验证system消息包含提示词
         call_args = self.ai_services.openai_client.chat.completions.create.call_args
         messages = call_args[1]['messages']
-        self.assertEqual(messages[0]['role'], 'system')
-        self.assertEqual(messages[0]['content'], "Custom prompt for English")
+
+        #self.assertEqual(messages[0]['role'], 'system')
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]['role'], 'user')
+        expected_user_content = "Custom prompt for English\n\n测试"
+        #self.assertEqual(messages[0]['content'], "Custom prompt for English")
+        self.assertEqual(messages[0]['content'], expected_user_content)
+
 
 
 class TestAIServicesTTS(unittest.TestCase):
