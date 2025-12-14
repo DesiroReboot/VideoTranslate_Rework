@@ -74,7 +74,8 @@ class AIServices:
             
             # 注意: 实际使用时需要将音频上传到OSS获取公网URL
             # 这里简化处理,使用同步API (仅支持较短音频)
-            recognition = Recognition(model=ASR_MODEL, api_key=DASHSCOPE_API_KEY)
+            recognition = Recognition(model=ASR_MODEL, api_key=DASHSCOPE_API_KEY, format='mp3',
+                sample_rate=16000)
             
             # 读取音频文件
             with open(audio_path, 'rb') as f:
@@ -82,8 +83,8 @@ class AIServices:
             
             # 调用识别API (使用文件内容)
             result = recognition.call(
-                format='mp3',
-                sample_rate=16000,
+                # format='mp3',
+                # sample_rate=16000,
                 audio=audio_data
             )
             
