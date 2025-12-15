@@ -59,8 +59,11 @@ class VideoTranslator:
         try:
             # 步骤1: 准备视频文件
             print("\n[步骤 1/6] 准备视频文件...")
-            video_path = VideoDownloader.prepare_video(url_or_path)
-            print(f"✓ 视频就绪: {video_path}")
+            video_path, bv_id = VideoDownloader.prepare_video(url_or_path)
+            if bv_id:
+                print(f"✓ 视频就绪: {video_path} (BV号: {bv_id})")
+            else:
+                print(f"✓ 视频就绪: {video_path}")
             
             # 步骤2: 提取音频
             print("\n[步骤 2/6] 提取原始音频...")
@@ -74,8 +77,11 @@ class VideoTranslator:
             print(f"✓ 识别完成,共 {len(original_text)} 字符")
             
             # 保存原文
-            video_name = Path(video_path).stem
-            original_text_file = OUTPUT_DIR / f"{video_name}_original.txt"
+            if bv_id:
+                original_text_file = OUTPUT_DIR / f"{bv_id}_original.txt"
+            else:
+                video_name = Path(video_path).stem
+                original_text_file = OUTPUT_DIR / f"{video_name}_original.txt"
             original_text_file.write_text(original_text, encoding='utf-8')
             print(f"  原文已保存: {original_text_file}")
             
@@ -89,7 +95,11 @@ class VideoTranslator:
             print(f"✓ 翻译完成,共 {len(translated_text)} 字符")
             
             # 保存译文
-            translated_text_file = OUTPUT_DIR / f"{video_name}_translated_{target_language}.txt"
+            if bv_id:
+                translated_text_file = OUTPUT_DIR / f"{bv_id}_{target_language}.txt"
+            else:
+                video_name = Path(video_path).stem
+                translated_text_file = OUTPUT_DIR / f"{video_name}_translated_{target_language}.txt"
             translated_text_file.write_text(translated_text, encoding='utf-8')
             print(f"  译文已保存: {translated_text_file}")
             
@@ -107,7 +117,9 @@ class VideoTranslator:
             print("提示: 正在合成视频,这可能需要几分钟...")
             output_video = AudioProcessor.replace_audio(
                 video_path,
-                new_audio
+                new_audio,
+                bv_id=bv_id,
+                target_language=target_language
             )
             print(f"✓ 视频合成完成!")
             

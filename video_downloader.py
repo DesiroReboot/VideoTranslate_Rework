@@ -5,9 +5,10 @@
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 import yt_dlp
 from config import YT_DLP_OPTIONS, TEMP_DIR
+from bv_utils import normalize_bilibili_url, extract_bv_from_url
 
 
 class VideoDownloader:
@@ -51,16 +52,16 @@ class VideoDownloader:
         return p.exists() and p.is_file() and p.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']
     
     @staticmethod
-    def download_bilibili_video(url: str, output_path: Optional[str] = None) -> str:
+    def download_bilibili_video(url: str, output_path: Optional[str] = None) -> Tuple[str, Optional[str]]:
         """
         从B站下载视频
         
         Args:
             url: B站视频URL
-            output_path: 可选的输出路径,不指定则使用默认临时目录
+            output_path: 可选的输出路径,不指定则使用BV号命名
             
         Returns:
-            下载后的视频文件路径
+            (下载后的视频文件路径, BV号) 的元组
             
         Raises:
             ValueError: URL无效或下载失败
@@ -68,12 +69,28 @@ class VideoDownloader:
         if not VideoDownloader.is_bilibili_url(url):
             raise ValueError(f"无效的B站URL: {url}")
         
+        # 提取BV号
+        bv_id, normalized_url = normalize_bilibili_url(url)
+        if bv_id:
+            print(f"识别BV号: {bv_id}")
+            url = normalized_url  # 使用规范化的URL
+        
+        # 检查是否已存在该BV号的视频（复用机制）
+        if bv_id:
+            existing_file = TEMP_DIR / f"{bv_id}.mp4"
+            if existing_file.exists():
+                print(f"✓ 检测到已下载的视频，直接复用: {existing_file}")
+                return str(existing_file), bv_id
+        
         print(f"开始下载B站视频: {url}")
         
         # 配置下载选项
         ydl_opts = YT_DLP_OPTIONS.copy()
         if output_path:
             ydl_opts['outtmpl'] = str(output_path)
+        elif bv_id:
+            # 使用BV号命名
+            ydl_opts['outtmpl'] = str(TEMP_DIR / f"{bv_id}.%(ext)s")
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -84,19 +101,22 @@ class VideoDownloader:
                 if 'requested_downloads' in info and info['requested_downloads']:
                     downloaded_file = info['requested_downloads'][0]['filepath']
                 else:
-                    # 备用方案:根据模板构建文件路径
-                    title = info.get('title', 'video')
+                    # 备用方案:根据BV号或标题构建文件路径
                     ext = info.get('ext', 'mp4')
-                    downloaded_file = str(TEMP_DIR / f"{title}.{ext}")
+                    if bv_id:
+                        downloaded_file = str(TEMP_DIR / f"{bv_id}.{ext}")
+                    else:
+                        title = info.get('title', 'video')
+                        downloaded_file = str(TEMP_DIR / f"{title}.{ext}")
                 
                 print(f"视频下载完成: {downloaded_file}")
-                return downloaded_file
+                return downloaded_file, bv_id
                 
         except Exception as e:
             raise ValueError(f"下载B站视频失败: {str(e)}")
     
     @staticmethod
-    def prepare_video(url_or_path: str) -> str:
+    def prepare_video(url_or_path: str) -> Tuple[str, Optional[str]]:
         """
         准备视频文件(下载或验证本地文件)
         
@@ -104,7 +124,7 @@ class VideoDownloader:
             url_or_path: B站URL或本地文件路径
             
         Returns:
-            可用的视频文件路径
+            (可用的视频文件路径, BV号) 的元组，本地文件BV号为None
             
         Raises:
             ValueError: 输入无效
@@ -117,13 +137,13 @@ class VideoDownloader:
         elif VideoDownloader.is_local_file(url_or_path):
             # 本地文件,直接返回
             print(f"使用本地视频文件: {url_or_path}")
-            return str(Path(url_or_path).absolute())
+            return str(Path(url_or_path).absolute()), None
         
         else:
             raise ValueError(
                 f"无效的输入: {url_or_path}\n"
                 "请提供:\n"
-                "1. B站视频URL (如: https://www.bilibili.com/video/BVxxxxxxxxx)\n"
+                "1. B站视频URL (支持BV号、AV号、b23.tv短链)\n"
                 "2. 本地视频文件路径 (支持格式: .mp4, .avi, .mov, .mkv)"
             )
 

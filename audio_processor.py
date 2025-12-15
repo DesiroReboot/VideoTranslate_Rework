@@ -65,7 +65,9 @@ class AudioProcessor:
     
     @staticmethod
     def replace_audio(video_path: str, new_audio_path: str, 
-                      output_video_path: Optional[str] = None) -> str:
+                      output_video_path: Optional[str] = None,
+                      bv_id: Optional[str] = None,
+                      target_language: Optional[str] = None) -> str:
         """
         替换视频中的音频
         
@@ -73,6 +75,8 @@ class AudioProcessor:
             video_path: 原视频文件路径
             new_audio_path: 新音频文件路径
             output_video_path: 输出视频路径,不指定则自动生成
+            bv_id: BV号，用于命名输出文件
+            target_language: 目标语言，用于命名输出文件
             
         Returns:
             输出的视频文件路径
@@ -116,8 +120,24 @@ class AudioProcessor:
             
             # 生成输出路径
             if not output_video_path:
-                video_name = Path(video_path).stem
-                output_video_path = str(OUTPUT_DIR / f"{video_name}_translated.mp4")
+                # 使用BV号和目标语言命名
+                if bv_id and target_language:
+                    base_name = f"{bv_id}_{target_language}"
+                elif bv_id:
+                    base_name = bv_id
+                else:
+                    video_name = Path(video_path).stem
+                    base_name = f"{video_name}_translated"
+                
+                # 检查文件是否存在，如果存在则添加计数
+                output_video_path = str(OUTPUT_DIR / f"{base_name}.mp4")
+                count = 1
+                while Path(output_video_path).exists():
+                    if bv_id and target_language:
+                        output_video_path = str(OUTPUT_DIR / f"{bv_id}_{target_language}_{count}.mp4")
+                    else:
+                        output_video_path = str(OUTPUT_DIR / f"{base_name}_{count}.mp4")
+                    count += 1
             
             # 输出视频
             final_video.write_videofile(
