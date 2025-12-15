@@ -71,11 +71,14 @@ class AIServices:
             
             # 使用异步任务API提交识别
             from dashscope.audio.asr import Recognition
+
+            def dummy_callback(*args, **kwargs):
+                pass
             
             # 注意: 实际使用时需要将音频上传到OSS获取公网URL
             # 这里简化处理,使用同步API (仅支持较短音频)
             recognition = Recognition(model=ASR_MODEL, api_key=DASHSCOPE_API_KEY, format='mp3',
-                sample_rate=16000)
+                sample_rate=16000, callback=dummy_callback)
             
             # 读取音频文件
             with open(audio_path, 'rb') as f:
@@ -85,7 +88,8 @@ class AIServices:
             result = recognition.call(
                 # format='mp3',
                 # sample_rate=16000,
-                audio=audio_data
+                #audio=audio_data
+                file=audio_path
             )
             
             if result.status_code == 200:
@@ -137,7 +141,7 @@ class AIServices:
             # 加载系统提示词
             system_prompt = load_translation_prompt(target_language)
             #print(f"[翻译]system prompt:{system_prompt}")
-            user_content = f"{system_prompt}\n\n{text}"
+            #user_content = f"{system_prompt}\n\n{text}"
             #print(f"[翻译]user context:{user_content}")
             
             # 构建消息

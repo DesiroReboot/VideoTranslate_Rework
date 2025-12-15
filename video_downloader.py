@@ -133,9 +133,9 @@ if __name__ == "__main__":
     # 测试URL验证
     test_urls = [
         "https://www.bilibili.com/video/BV1xx411c7mD",
-        "https://b23.tv/abc123",
-        "https://www.youtube.com/watch?v=xxx",  # 非B站URL
-        "test.mp4",  # 本地文件
+#"https://b23.tv/abc123",
+        #"https://www.youtube.com/watch?v=xxx",  # 非B站URL
+        #"test.mp4",  # 本地文件
     ]
     
     for url in test_urls:

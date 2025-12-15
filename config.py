@@ -16,7 +16,7 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 
 # ==================== 模型配置 ====================
 # 语音识别模型 (ASR)
-ASR_MODEL = "sensevoice-v1"  # 支持50+语言,适合多语言视频
+ASR_MODEL = "paraformer-v2"  # 支持50+语言,适合多语言视频
 
 # 机器翻译模型 (MT)
 MT_MODEL = "qwen-mt-plus"  # 高质量翻译,支持92种语言
@@ -62,8 +62,9 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # ==================== 下载配置 ====================
 # yt-dlp下载参数
 YT_DLP_OPTIONS = {
-    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-    'outtmpl': str(TEMP_DIR / '%(title)s.%(ext)s'),
+    'format': '30064+30280/30066+30280/100024+30280',  # 720P: avc1/hevc/av01 + 音频 (需FFmpeg合并)
+    'outtmpl': str(TEMP_DIR / '%(epoch)s.%(ext)s'),  # 使用时间戳避免中文文件名
+    'merge_output_format': 'mp4',  # 合并为mp4格式
     'quiet': False,
     'no_warnings': False,
 }
