@@ -8,6 +8,7 @@ import time
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
+from urllib.parse import unquote
 import dashscope
 from openai import OpenAI
 from config import (
@@ -46,7 +47,7 @@ class AIServices:
     def speech_to_text(self, audio_path: str) -> str:
         """
         语音识别 (ASR) - 将音频转换为文本
-        使用SenseVoice模型,支持50+语言
+        使用Fun-ASR模型,支持50+语言,支持文件URL识别
         
         Args:
             audio_path: 音频文件路径
@@ -58,64 +59,91 @@ class AIServices:
             Exception: 识别失败
         """
         print(f"\n[ASR] 开始语音识别: {audio_path}")
-        print(f"[ASR] 注意: 需要先上传音频到可访问的URL")
+        print(f"[ASR] 模型: {ASR_MODEL}")
         
         try:
-            # SenseVoice需要文件通过公网URL访问
-            # 这里提供两种方案:
-            
-            # 方案1: 使用文件URL (需要先上传到OSS等云存储)
-            # 由于本地文件无法直接访问,这里使用异步任务API
+            # 上传音频到OSS获取公网访问URL
+            print(f"[ASR] 上传音频到OSS...")
+            audio_url = self._upload_to_oss(audio_path)
+            print(f"[ASR] OSS URL生成成功")
             
             print(f"[ASR] 提交语音识别任务...")
             
-            # 使用异步任务API提交识别
-            from dashscope.audio.asr import Recognition
-
-            def dummy_callback(*args, **kwargs):
-                pass
+            # 使用Fun-ASR文件识别API
+            from http import HTTPStatus
+            from dashscope.audio.asr import Transcription
             
-            # 注意: 实际使用时需要将音频上传到OSS获取公网URL
-            # 这里简化处理,使用同步API (仅支持较短音频)
-            recognition = Recognition(model=ASR_MODEL, api_key=DASHSCOPE_API_KEY, format='mp3',
-                sample_rate=16000, callback=dummy_callback)
-            
-            # 读取音频文件
-            with open(audio_path, 'rb') as f:
-                audio_data = f.read()
-            
-            # 调用识别API (使用文件内容)
-            result = recognition.call(
-                # format='mp3',
-                # sample_rate=16000,
-                #audio=audio_data
-                file=audio_path
+            # 调用异步文件识别
+            task_response = Transcription.async_call(
+                model=ASR_MODEL,
+                file_urls=[audio_url],
+                language_hints = ['zh', 'en'],  # 支持中英文
             )
             
-            if result.status_code == 200:
-                # 解析结果
-                text = result.output.get('text', '')
-                if not text and 'results' in result.output:
-                    # 尝试从results中提取文本
-                    results = result.output.get('results', [])
-                    text = ' '.join([r.get('text', '') for r in results])
+            if task_response.status_code != HTTPStatus.OK:
+                raise Exception(f"ASR任务提交失败: {task_response.message}")
+            
+            task_id = task_response.output['task_id']
+            print(f"[ASR] 任务ID: {task_id}, 等待识别完成...")
+            
+            # 轮询任务状态
+            import time
+            max_retries = 60  # 最多等待60次
+            for i in range(max_retries):
+                result_response = Transcription.wait(task=task_id)
                 
-                print(f"[ASR] 识别成功,文本长度: {len(text)} 字符")
-                print(f"[ASR] 识别文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 识别文本: {text}")
-                return text
-            else:
-                raise Exception(f"ASR识别失败: {result.message}")
+                if result_response.status_code != HTTPStatus.OK:
+                    raise Exception(f"ASR任务查询失败: {result_response.message}")
+                
+                task_status = result_response.output['task_status']
+                
+                if task_status == 'SUCCEEDED':
+                    # 获取识别结果
+                    transcription_url = result_response.output['results'][0]['transcription_url']
+                    print(f"[ASR] 识别完成, 下载结果...")
+                    
+                    # 下载并解析结果
+                    import requests
+                    import json
+                    resp = requests.get(transcription_url)
+                    resp.raise_for_status()
+                    result_data = resp.json()
+                    
+                    # 提取文本
+                    text = result_data.get('transcripts', [{}])[0].get('text', '')
+                    
+                    if not text:
+                        # 尝试从句子中提取
+                        sentences = result_data.get('transcripts', [{}])[0].get('sentences', [])
+                        text = ' '.join([s.get('text', '') for s in sentences])
+                    
+                    print(f"[ASR] 识别成功,文本长度: {len(text)} 字符")
+                    print(f"[ASR] 识别文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 识别文本: {text}")
+                    return text
+                    
+                elif task_status == 'FAILED':
+                    raise Exception(f"ASR任务失败: {result_response.output.get('message', 'Unknown error')}")
+                
+                elif task_status in ['PENDING', 'RUNNING']:
+                    print(f"[ASR] 任务状态: {task_status}, 等待中... ({i+1}/{max_retries})")
+                    time.sleep(2)  # 等待2秒
+                else:
+                    print(f"[ASR] 未知状态: {task_status}")
+                    time.sleep(2)
+            
+            raise Exception("ASR任务超时")
                 
         except Exception as e:
             print(f"[ASR] 错误: {str(e)}")
             print(f"[ASR] 提示: 如果识别失败,请确保:")
-            print(f"      1. 音频格式正确 (支持MP3, WAV等)")
-            print(f"      2. API Key有效且有足够额度")
-            print(f"      3. 音频时长不超过限制")
+            print(f"      1. OSS bucket已配置且文件上传成功")
+            print(f"      2. 音频格式正确 (支持MP3, WAV等)")
+            print(f"      3. API Key有效且有足够额度")
+            print(f"      4. 音频时长不超过限制")
             
             # 返回占位文本用于测试
             print(f"\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
-            return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和上传音频到OSS后重试。"
+            return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和OSS后重试。"
     
     def translate_text(self, text: str, target_language: str, 
                       source_language: str = "auto") -> str:
@@ -176,6 +204,7 @@ class AIServices:
                       language: str = "Chinese", voice: Optional[str] = None) -> str:
         """
         文本转语音 (TTS) - 使用Qwen3-TTS-Flash
+        支持长文本分段处理（API限制600字符）
         
         Args:
             text: 待合成的文本
@@ -199,37 +228,109 @@ class AIServices:
                 voice = TTS_VOICE_MAP.get(language, DEFAULT_VOICE)
             print(f"[TTS] 音色: {voice}")
             
-            # 调用TTS API
-            response = dashscope.MultiModalConversation.call(
-                model=TTS_MODEL,
-                api_key=DASHSCOPE_API_KEY,
-                text=text,
-                voice=voice,
-                language_type=language,
-                stream=False
-            )
+            # TTS API限制：单次最多600字符
+            MAX_TTS_LENGTH = 600
             
-            # 检查响应
-            if response.status_code != 200:
-                raise Exception(f"TTS API调用失败: {response.message}")
-            
-            # 获取音频URL
-            audio_url = response.output.audio.url
-            print(f"[TTS] 音频URL: {audio_url}")
-            
-            # 下载音频文件
-            if not output_path:
-                timestamp = int(time.time())
-                output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
-            
-            print(f"[TTS] 下载音频到: {output_path}")
-            self._download_file(audio_url, output_path)
-            
-            print(f"[TTS] 语音合成完成: {output_path}")
-            return output_path
-            
+            if len(text) <= MAX_TTS_LENGTH:
+                # 文本较短，直接合成
+                print(f"[TTS] 文本较短，直接合成")
+                return self._synthesize_single(text, voice, language, output_path)
+            else:
+                # 文本过长，需要分段处理并合并
+                print(f"[TTS] 文本过长，需要分段处理（每段最多{MAX_TTS_LENGTH}字符）")
+                return self._synthesize_long_text(text, voice, language, output_path, MAX_TTS_LENGTH)
+                
         except Exception as e:
             raise Exception(f"语音合成失败: {str(e)}")
+    
+    def _synthesize_single(self, text: str, voice: str, language: str, output_path: Optional[str] = None) -> str:
+        """
+        合成单段文本
+        """
+        # 调用TTS API
+        response = dashscope.MultiModalConversation.call(
+            model=TTS_MODEL,
+            api_key=DASHSCOPE_API_KEY,
+            text=text,
+            voice=voice,
+            language_type=language,
+            stream=False
+        )
+        
+        # 检查响应
+        if response.status_code != 200:
+            raise Exception(f"TTS API调用失败: {response.message}")
+        
+        # 获取音频URL
+        audio_url = response.output.audio.url
+        print(f"[TTS] 音频URL: {audio_url}")
+        
+        # 下载音频文件
+        if not output_path:
+            timestamp = int(time.time())
+            output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
+        
+        print(f"[TTS] 下载音频到: {output_path}")
+        self._download_file(audio_url, output_path)
+        
+        print(f"[TTS] 语音合成完成: {output_path}")
+        return output_path
+    
+    def _synthesize_long_text(self, text: str, voice: str, language: str, 
+                             output_path: Optional[str], max_length: int) -> str:
+        """
+        分段合成长文本并合并音频
+        """
+        from pydub import AudioSegment
+        
+        # 按句子分割文本
+        sentences = text.replace('。', '.|').replace('.', '.|').replace('!', '!|').replace('?', '?|').split('|')
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        # 将句子组合成不超过max_length的段落
+        chunks = []
+        current_chunk = ""
+        for sentence in sentences:
+            if len(current_chunk) + len(sentence) <= max_length:
+                current_chunk += sentence + " "
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence + " "
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        print(f"[TTS] 分为 {len(chunks)} 段进行合成")
+        
+        # 合成每一段
+        audio_segments = []
+        for i, chunk in enumerate(chunks):
+            print(f"[TTS] 合成第 {i+1}/{len(chunks)} 段 ({len(chunk)}字符)...")
+            temp_path = str(TEMP_DIR / f"tts_chunk_{i}_{int(time.time())}.wav")
+            self._synthesize_single(chunk, voice, language, temp_path)
+            audio_segments.append(AudioSegment.from_wav(temp_path))
+            
+        # 合并所有音频段
+        print(f"[TTS] 合并 {len(audio_segments)} 个音频段...")
+        combined = audio_segments[0]
+        for segment in audio_segments[1:]:
+            combined += segment
+        
+        # 保存合并后的音频
+        if not output_path:
+            timestamp = int(time.time())
+            output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
+        
+        combined.export(output_path, format="wav")
+        print(f"[TTS] 长文本合成完成: {output_path}")
+        
+        # 清理临时文件
+        for i in range(len(chunks)):
+            temp_path = str(TEMP_DIR / f"tts_chunk_{i}_{int(time.time())}.wav")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        
+        return output_path
     
     @staticmethod
     def _download_file(url: str, output_path: str) -> None:
@@ -296,20 +397,30 @@ class AIServices:
         auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
         bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
 
-    # 上传文件
+    #上传文件
         if file_path:
             relative_path = os.path.relpath(file_path, PROJECT_ROOT)
             object_name = relative_path.replace("\\", "/")
         bucket.put_object_from_file(object_name, file_path)
     
-    # 返回可公开访问的URL（注意：Bucket必须是Public Read才能直接访问）
-    # 如果Bucket是Private，需生成签名URL（见下文）
-        #return f"https://{bucket_name}.{endpoint}/{object_name}"
-        return bucket.sign_url(
-        method='GET',
-        key=object_name,
-        expires=expiration
-    )
+    # 返回可公开访问的URL
+    # 方案1: 如果Bucket是Public Read，直接返回公开URL
+    # 方案2: 如果Bucket是Private，生成签名URL
+        
+        # 使用公开URL（公开bucket）
+        public_url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_name}"
+        print(f"[OSS] 公开URL已生成")
+        print(f"[OSS] URL: {public_url}")
+        
+        return public_url
+        
+        # 如果需要签名URL（私有bucket），使用以下代码：
+        # signed_url = bucket.sign_url(
+        #     method='GET',
+        #     key=object_name,
+        #     expires=expiration
+        # )
+        # return signed_url
         
         # raise NotImplementedError(
         #     "需要配置阿里云OSS用于音频上传\n"

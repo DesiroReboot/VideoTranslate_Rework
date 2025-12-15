@@ -95,10 +95,24 @@ class AudioProcessor:
                 # 可以选择循环音频或保持原样
             elif new_audio.duration > video.duration:
                 print(f"提示: 音频时长({new_audio.duration:.2f}s) 长于视频时长({video.duration:.2f}s),将自动裁剪")
-                new_audio = new_audio.subclip(0, video.duration)
+                # 使用pydub裁剪音频
+                from pydub import AudioSegment
+                import tempfile
+                
+                # 读取音频文件
+                audio_segment = AudioSegment.from_wav(new_audio_path)
+                # 裁剪到视频长度(毫秒)
+                trimmed_audio = audio_segment[:int(video.duration * 1000)]
+                # 保存为临时文件
+                temp_audio_path = tempfile.mktemp(suffix=".wav")
+                trimmed_audio.export(temp_audio_path, format="wav")
+                
+                # 重新加载裁剪后的音频
+                new_audio.close()
+                new_audio = AudioFileClip(temp_audio_path)
             
             # 替换音频
-            final_video = video.set_audio(new_audio)
+            final_video = video.with_audio(new_audio)
             
             # 生成输出路径
             if not output_video_path:
@@ -110,7 +124,6 @@ class AudioProcessor:
                 output_video_path,
                 codec=VIDEO_CODEC,
                 audio_codec=AUDIO_CODEC,
-                verbose=False,
                 logger=None
             )
             

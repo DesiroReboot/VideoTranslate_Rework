@@ -15,8 +15,8 @@ DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 
 # ==================== 模型配置 ====================
-# 语音识别模型 (ASR)
-ASR_MODEL = "paraformer-v2"  # 支持50+语言,适合多语言视频
+# 语音识别模型 (ASR) - 使用Fun-ASR支持文件URL识别
+ASR_MODEL = "fun-asr"  # 支持50+语言,适合多语言视频,支持文件URL识别
 
 # 机器翻译模型 (MT)
 MT_MODEL = "qwen-mt-plus"  # 高质量翻译,支持92种语言
