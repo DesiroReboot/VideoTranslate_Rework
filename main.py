@@ -19,6 +19,7 @@ from config import validate_config, OUTPUT_DIR
 from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
+from cleanup_temp import cleanup_temp_files
 
 
 class VideoTranslator:
@@ -119,6 +120,13 @@ class VideoTranslator:
             print(f"  原文文本: {original_text_file}")
             print(f"  译文文本: {translated_text_file}")
             print("="*60 + "\n")
+            
+            # 自动清理临时文件
+            print("\n[清理临时文件]")
+            try:
+                cleanup_temp_files(keep_video_path=str(output_video))
+            except Exception as e:
+                print(f"警告: 临时文件清理失败: {e}")
             
             return output_video
             
