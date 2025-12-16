@@ -148,7 +148,7 @@ class AIServices:
     def translate_text(self, text: str, target_language: str, 
                       source_language: str = "auto") -> str:
         """
-        文本翻译 - 使用Qwen-MT模型
+        文本翻译 - 使用Qwen-max模型和自定义Prompt
         
         Args:
             text: 待翻译文本
@@ -163,32 +163,23 @@ class AIServices:
         """
         print(f"\n[翻译] 开始翻译到 {target_language}")
         print(f"[翻译] 原文长度: {len(text)} 字符")
-        #print(f"[翻译]原文：{text}")
         
         try:
             # 加载系统提示词
             system_prompt = load_translation_prompt(target_language)
-            #print(f"[翻译]system prompt:{system_prompt}")
-            #user_content = f"{system_prompt}\n\n{text}"
-            #print(f"[翻译]user context:{user_content}")
+            print(f"[翻译] 使用自定义Prompt")
             
             # 构建消息
             messages = [
-                # {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
-                #{"role": "user", "content": user_content}
             ]
             
-            # 调用Qwen-MT API
+            # 调用Qwen-max API
             completion = self.openai_client.chat.completions.create(
                 model=MT_MODEL,
                 messages=messages,
-                extra_body={
-                    "translation_options": {
-                        "source_lang": source_language,
-                        "target_lang": target_language,
-                    }
-                }
+                temperature=0.3,  # 较低的温度以保证翻译稳定性
             )
             
             translated_text = completion.choices[0].message.content

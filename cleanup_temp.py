@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,56 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 TEMP_DIR = PROJECT_ROOT / "temp"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+
+
+def is_bv_video(filename: str) -> bool:
+    """
+    检查文件名是否为BV号命名的原视频文件
+    匹配格式: BV + 字母数字.mp4
+    例如: BV1vmmLBpEtz.mp4
+    
+    Args:
+        filename: 文件名
+        
+    Returns:
+        是否为BV号视频
+    """
+    if not filename.endswith('.mp4'):
+        return False
+    
+    # 匹配BV号格式: BV + 字母数字.mp4 (不包含下划线)
+    bv_pattern = r'^BV[a-zA-Z0-9]+\.mp4$'
+    return bool(re.match(bv_pattern, filename))
+
+
+def is_translated_video(filename: str) -> bool:
+    """
+    检查文件名是否为翻译后的视频文件
+    匹配格式：
+    - {BV号}_{target_language}.mp4
+    - {BV号}_{target_language}_{count}.mp4
+    - {any_name}_translated.mp4 (兼容本地文件)
+    
+    Args:
+        filename: 文件名
+        
+    Returns:
+        是否为翻译视频
+    """
+    if not filename.endswith('.mp4'):
+        return False
+    
+    # 匹配BV号格式: BV + 字母数字 + _ + 语言 + (可选_数字).mp4
+    # 例如: BV1vmmLBpEtz_English.mp4, BV1vmmLBpEtz_English_1.mp4
+    bv_pattern = r'^BV[a-zA-Z0-9]+_[A-Za-z]+(_\d+)?\.mp4$'
+    if re.match(bv_pattern, filename):
+        return True
+    
+    # 兼容旧格式: 任意名称_translated.mp4
+    if '_translated.mp4' in filename:
+        return True
+    
+    return False
 
 
 def cleanup_temp_files(keep_video_path=None):
@@ -28,7 +79,16 @@ def cleanup_temp_files(keep_video_path=None):
     if TEMP_DIR.exists():
         print(f"\n清理 {TEMP_DIR} 目录...")
         deleted_count = 0
+        kept_count = 0
+        
         for item in TEMP_DIR.iterdir():
+            # 保留BV号命名的原视频文件
+            if item.is_file() and is_bv_video(item.name):
+                print(f"  ⊚ 保留: {item.name}")
+                kept_count += 1
+                continue
+            
+            # 删除其他文件
             try:
                 if item.is_file():
                     item.unlink()
@@ -40,7 +100,8 @@ def cleanup_temp_files(keep_video_path=None):
                     print(f"  ✓ 删除目录: {item.name}")
             except Exception as e:
                 print(f"  ✗ 无法删除 {item.name}: {e}")
-        print(f"temp目录清理完成，共删除 {deleted_count} 个文件/目录")
+        
+        print(f"temp目录清理完成，删除 {deleted_count} 个，保留 {kept_count} 个文件/目录")
     
     # 清理output目录（保留指定的视频文件）
     if OUTPUT_DIR.exists():
@@ -55,8 +116,8 @@ def cleanup_temp_files(keep_video_path=None):
                 kept_count += 1
                 continue
             
-            # 只保留最终翻译后的视频文件（文件名包含_translated）
-            if item.is_file() and "_translated" in item.name and item.suffix == ".mp4":
+            # 保留所有翻译后的视频文件
+            if item.is_file() and is_translated_video(item.name):
                 print(f"  ⊙ 保留: {item.name}")
                 kept_count += 1
                 continue

@@ -19,7 +19,7 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 ASR_MODEL = "fun-asr"  # 支持50+语言,适合多语言视频,支持文件URL识别
 
 # 机器翻译模型 (MT)
-MT_MODEL = "qwen-mt-plus"  # 高质量翻译,支持92种语言
+MT_MODEL = "qwen-max"  # 使用Qwen3-max，支持自定义prompt
 
 # 语音合成模型 (TTS)
 TTS_MODEL = "qwen3-tts-flash"  # 49种音色,支持多语言
