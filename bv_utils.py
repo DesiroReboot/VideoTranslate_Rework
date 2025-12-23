@@ -18,8 +18,13 @@ def extract_bv_from_url(url: str) -> Optional[str]:
     Returns:
         BV号，如果无法提取则返回None
     """
+    # 安全: 限制URL长度防止ReDoS攻击
+    if len(url) > 500:
+        return None
+    
     # 匹配BV号（保持原始大小写）
-    bv_pattern = r'[Bb][Vv][a-zA-Z0-9]+'
+    # 限制BV号长度为10-13个字符，防止贪婪匹配
+    bv_pattern = r'[Bb][Vv][a-zA-Z0-9]{10,13}'
     match = re.search(bv_pattern, url)
     if match:
         bv_raw = match.group(0)
@@ -86,8 +91,27 @@ def resolve_short_link(short_url: str, timeout: int = 5) -> Optional[str]:
         真实URL，如果解析失败则返回None
     """
     try:
+        # 安全: 验证URL格式，防止SSRF攻击
+        if not short_url.startswith('http'):
+            short_url = 'https://' + short_url
+        
+        # 只允许b23.tv域名
+        # if 'b23.tv' not in short_url:
+        #     print("错误: 仅支持b23.tv短链接")
+        #     return None
+        
+        # 限制超时时间，防止挂起
+        if timeout > 10:
+            timeout = 10
+        
         # 发送HEAD请求，不下载内容
         response = requests.head(short_url, allow_redirects=True, timeout=timeout)
+        
+        # 验证重定向后的URL也是B站域名
+        if 'bilibili.com' not in response.url:
+            print(f"警告: 短链接重定向到非哔哩哔哩域名: {response.url}")
+            return None
+        
         return response.url
     except Exception as e:
         print(f"解析短链接失败: {e}")

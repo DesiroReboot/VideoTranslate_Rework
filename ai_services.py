@@ -24,6 +24,12 @@ from config import (
 #from dashscope.audio.asr import Recognition
 
 
+# 安全异常类
+class SecurityError(Exception):
+    """安全相关异常"""
+    pass
+
+
 class AIServices:
     """AI服务集成类"""
     
@@ -35,7 +41,8 @@ class AIServices:
         
         # 设置DashScope配置
         dashscope.api_key = DASHSCOPE_API_KEY
-        print(f"DEBUG: DASHSCOPE_API_KEY = {repr(dashscope.api_key)}")
+        # 安全：不打印API密钥
+        print(f"[初始化] API密钥已加载 (长度: {len(dashscope.api_key) if dashscope.api_key else 0})")
         dashscope.base_http_api_url = f"{DASHSCOPE_BASE_URL}/api/v1"
         
         # 初始化OpenAI客户端(用于调用Qwen兼容接口)
@@ -293,33 +300,40 @@ class AIServices:
         
         print(f"[TTS] 分为 {len(chunks)} 段进行合成")
         
-        # 合成每一段
+        # 合成每一段，记录临时文件名
         audio_segments = []
-        for i, chunk in enumerate(chunks):
-            print(f"[TTS] 合成第 {i+1}/{len(chunks)} 段 ({len(chunk)}字符)...")
-            temp_path = str(TEMP_DIR / f"tts_chunk_{i}_{int(time.time())}.wav")
-            self._synthesize_single(chunk, voice, language, temp_path)
-            audio_segments.append(AudioSegment.from_wav(temp_path))
+        temp_files = []  # 修复: 跟踪实际创建的临时文件
+        
+        try:
+            for i, chunk in enumerate(chunks):
+                print(f"[TTS] 合成第 {i+1}/{len(chunks)} 段 ({len(chunk)}字符)...")
+                temp_path = str(TEMP_DIR / f"tts_chunk_{i}_{int(time.time()*1000)}.wav")  # 使用毫秒避免冲突
+                self._synthesize_single(chunk, voice, language, temp_path)
+                audio_segments.append(AudioSegment.from_wav(temp_path))
+                temp_files.append(temp_path)  # 记录实际文件名
             
-        # 合并所有音频段
-        print(f"[TTS] 合并 {len(audio_segments)} 个音频段...")
-        combined = audio_segments[0]
-        for segment in audio_segments[1:]:
-            combined += segment
-        
-        # 保存合并后的音频
-        if not output_path:
-            timestamp = int(time.time())
-            output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
-        
-        combined.export(output_path, format="wav")
-        print(f"[TTS] 长文本合成完成: {output_path}")
-        
-        # 清理临时文件
-        for i in range(len(chunks)):
-            temp_path = str(TEMP_DIR / f"tts_chunk_{i}_{int(time.time())}.wav")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            # 合并所有音频段
+            print(f"[TTS] 合并 {len(audio_segments)} 个音频段...")
+            combined = audio_segments[0]
+            for segment in audio_segments[1:]:
+                combined += segment
+            
+            # 保存合并后的音频
+            if not output_path:
+                timestamp = int(time.time())
+                output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
+            
+            combined.export(output_path, format="wav")
+            print(f"[TTS] 长文本合成完成: {output_path}")
+            
+        finally:
+            # 清理临时文件（使用实际记录的文件名）
+            for temp_path in temp_files:
+                try:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except Exception as e:
+                    print(f"[TTS] 警告: 无法删除临时文件 {temp_path}: {e}")
         
         return output_path
     
@@ -342,7 +356,7 @@ class AIServices:
     @staticmethod
     def _upload_to_oss(file_path: str,  expiration=3600) -> str:
         """
-        上传文件到阿里云OSS (待实现)
+        上传文件到阿里云OSS
         
         Args:
             file_path: 本地文件路径
@@ -350,58 +364,69 @@ class AIServices:
         Returns:
             OSS公网URL
             
-        注意:
-            实际使用时需要:
-            1. pip install oss2
-            2. 配置OSS bucket和credentials
-            3. 上传文件并返回公网URL
+        Raises:
+            ValueError: 文件路径非法或超出大小限制
+            SecurityError: 路径遍历攻击检测
         """
-        # TODO: 实现OSS上传
         import oss2
-        # auth = oss2.Auth(access_key_id, access_key_secret)
-        # bucket = oss2.Bucket(auth, endpoint, bucket_name)
-        # result = bucket.put_object_from_file(object_name, file_path)
-        # return f"https://{bucket_name}.{endpoint}/{object_name}"
-        # 从环境变量获取安全凭证（推荐！）   
-        # access_key_id = os.getenv("OSS_ACCESS_KEY_ID")
-        # access_key_secret = os.getenv("OSS_ACCESS_KEY_SECRET")
-        # oss_bucket_name = os.getenv("OSS_BUCKET_NAME")
-        #endpoint = os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")  # 默认杭州
-        #endpoint = os.getenv("OSS_ENDPOINT")
-        # endpoint = OSS_ENDPOINT
-
-    # 验证环境变量是否设置
-        required_vars={
+        
+        # 安全检查1: 验证文件存在且可读
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            raise ValueError(f"文件不存在: {file_path}")
+        if not file_path_obj.is_file():
+            raise ValueError(f"不是有效文件: {file_path}")
+        
+        # 安全检查2: 验证文件大小（限制100MB）
+        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+        file_size = file_path_obj.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"文件过大: {file_size / 1024 / 1024:.2f}MB (限制: {MAX_FILE_SIZE / 1024 / 1024}MB)")
+        if file_size == 0:
+            raise ValueError("文件为空")
+        
+        # 安全检查3: 防止路径遍历攻击
+        try:
+            resolved_path = file_path_obj.resolve()
+            project_root_resolved = Path(PROJECT_ROOT).resolve()
+            # 确保文件在项目目录内
+            resolved_path.relative_to(project_root_resolved)
+        except (ValueError, RuntimeError) as e:
+            raise SecurityError(f"检测到路径遍历攻击: {file_path}")
+        
+        # 验证环境变量是否设置
+        required_vars = {
             "ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
             "ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
             "OSS_BUCKET_NAME": OSS_BUCKET_NAME
-            #OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME,OSS_ENDPOINT
         }
         missing_vars = [name for name, value in required_vars.items() if not value]
-    
+        
         if missing_vars:
             raise ValueError(
                 f"Missing required OSS environment variables: {', '.join(missing_vars)}"
-        )
-
-    # 初始化OSS客户端
+            )
+        
+        # 初始化OSS客户端
         auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
         bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
-
-    #上传文件
-        if file_path:
-            relative_path = os.path.relpath(file_path, PROJECT_ROOT)
-            object_name = relative_path.replace("\\", "/")
-        bucket.put_object_from_file(object_name, file_path)
-    
-    # 返回可公开访问的URL
-    # 方案1: 如果Bucket是Public Read，直接返回公开URL
-    # 方案2: 如果Bucket是Private，生成签名URL
         
-        # 使用公开URL（公开bucket）
+        # 生成安全的对象名（使用相对路径并规范化）
+        relative_path = resolved_path.relative_to(project_root_resolved)
+        # 移除任何 .. 路径组件
+        object_name = str(relative_path).replace("\\", "/")
+        if ".." in object_name:
+            raise SecurityError(f"对象名包含非法字符: {object_name}")
+        
+        # 上传文件
+        try:
+            bucket.put_object_from_file(object_name, str(resolved_path))
+        except Exception as e:
+            raise Exception(f"OSS上传失败: {str(e)}")
+        
+        # 返回公开URL
         public_url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_name}"
-        print(f"[OSS] 公开URL已生成")
-        print(f"[OSS] URL: {public_url}")
+        print(f"[OSS] 文件上传成功 (大小: {file_size / 1024:.2f}KB)")
         
         return public_url
         

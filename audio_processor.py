@@ -25,16 +25,38 @@ class AudioProcessor:
             提取的音频文件路径
 
         Raises:
+            ValueError: 输入参数非法
             Exception: 提取失败
         """
         print(f"正在从视频中提取音频: {video_path}")
 
         try:
-            # 检查输入参数
+            # 安全检查1: 验证输入参数
             if not video_path or not video_path.strip():
                 raise ValueError("视频文件路径不能为空")
+            
+            # 安全检查2: 验证文件存在性
+            video_path_obj = Path(video_path)
+            if not video_path_obj.exists():
+                raise ValueError(f"视频文件不存在: {video_path}")
+            if not video_path_obj.is_file():
+                raise ValueError(f"不是有效的文件: {video_path}")
+            
+            # 安全检查3: 验证文件扩展名
+            allowed_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv']
+            if video_path_obj.suffix.lower() not in allowed_extensions:
+                raise ValueError(f"不支持的视频格式: {video_path_obj.suffix}")
+            
+            # 安全检查4: 验证文件大小（限制500MB）
+            MAX_VIDEO_SIZE = 500 * 1024 * 1024  # 500MB
+            file_size = video_path_obj.stat().st_size
+            if file_size > MAX_VIDEO_SIZE:
+                raise ValueError(f"视频文件过大: {file_size / 1024 / 1024:.2f}MB (限制: {MAX_VIDEO_SIZE / 1024 / 1024}MB)")
+            if file_size == 0:
+                raise ValueError("视频文件为空")
+            
             # 加载视频
-            video = VideoFileClip(video_path)
+            video = VideoFileClip(str(video_path_obj))
             
             # 检查是否有音频
             if video.audio is None:

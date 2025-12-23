@@ -75,6 +75,19 @@ def cleanup_temp_files(keep_video_path=None):
     print("开始清理临时文件...")
     print("="*60)
     
+    # 安全检查: 验证目录存在且在项目内
+    try:
+        temp_dir_resolved = TEMP_DIR.resolve()
+        output_dir_resolved = OUTPUT_DIR.resolve()
+        project_root_resolved = PROJECT_ROOT.resolve()
+        
+        # 确保目录在项目范围内
+        temp_dir_resolved.relative_to(project_root_resolved)
+        output_dir_resolved.relative_to(project_root_resolved)
+    except ValueError:
+        print("错误: 检测到目录路径异常，中止清理")
+        return
+    
     # 清理temp目录
     if TEMP_DIR.exists():
         print(f"\n清理 {TEMP_DIR} 目录...")
@@ -82,6 +95,14 @@ def cleanup_temp_files(keep_video_path=None):
         kept_count = 0
         
         for item in TEMP_DIR.iterdir():
+            # 安全检查: 确保文件仍在temp目录内（防止符号链接攻击）
+            try:
+                item_resolved = item.resolve()
+                item_resolved.relative_to(temp_dir_resolved)
+            except ValueError:
+                print(f"  ⚠ 警告: 跳过项目外路径: {item.name}")
+                continue
+            
             # 保留BV号命名的原视频文件
             if item.is_file() and is_bv_video(item.name):
                 print(f"  ⊚ 保留: {item.name}")
@@ -110,6 +131,14 @@ def cleanup_temp_files(keep_video_path=None):
         kept_count = 0
         
         for item in OUTPUT_DIR.iterdir():
+            # 安全检查: 确保文件仍在output目录内
+            try:
+                item_resolved = item.resolve()
+                item_resolved.relative_to(output_dir_resolved)
+            except ValueError:
+                print(f"  ⚠ 警告: 跳过项目外路径: {item.name}")
+                continue
+            
             # 如果指定了保留文件，且当前文件是要保留的
             if keep_video_path and item.resolve() == Path(keep_video_path).resolve():
                 print(f"  ⊙ 保留: {item.name}")

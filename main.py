@@ -173,6 +173,28 @@ def main():
     target_language = sys.argv[2]
     source_language = sys.argv[3] if len(sys.argv) > 3 else "auto"
     
+    # 安全验证: 限制输入长度
+    if len(url_or_path) > 1000:
+        print("错误: URL或路径过长")
+        sys.exit(1)
+    
+    # 安全验证: 语言参数白名单
+    allowed_languages = [
+        "Chinese", "English", "Japanese", "Korean", "Spanish", "French",
+        "German", "Russian", "Italian", "Portuguese", "Arabic", "Hindi",
+        "auto"  # 自动检测
+    ]
+    
+    if target_language not in allowed_languages:
+        print(f"错误: 不支持的目标语言 '{target_language}'")
+        print(f"支持的语言: {', '.join(allowed_languages)}")
+        sys.exit(1)
+    
+    if source_language not in allowed_languages:
+        print(f"错误: 不支持的源语言 '{source_language}'")
+        print(f"支持的语言: {', '.join(allowed_languages)}")
+        sys.exit(1)
+    
     try:
         # 创建翻译器并执行
         translator = VideoTranslator()
