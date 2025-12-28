@@ -21,6 +21,7 @@ from config import (
     OSS_ENDPOINT,PROJECT_ROOT,
     OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
 )
+from security import SecurityValidator, OutputValidationError
 #from dashscope.audio.asr import Recognition
 
 
@@ -126,6 +127,15 @@ class AIServices:
                     
                     print(f"[ASR] 识别成功,文本长度: {len(text)} 字符")
                     print(f"[ASR] 识别文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 识别文本: {text}")
+                    
+                    # 安全验证：清理ASR输出
+                    try:
+                        text = SecurityValidator.sanitize_asr_output(text)
+                        print(f"[ASR] 安全验证通过")
+                    except OutputValidationError as e:
+                        print(f"[ASR] 安全验证失败: {e}")
+                        raise Exception(f"ASR输出安全验证失败: {e}")
+                    
                     return text
                     
                 elif task_status == 'FAILED':
@@ -189,7 +199,19 @@ class AIServices:
                 temperature=0.3,  # 较低的温度以保证翻译稳定性
             )
             
-            translated_text = completion.choices[0].message.content
+            # OWASP LLM02 防护：LLM输出必须立即验证
+            # SECURITY: LLM output is immediately validated by SecurityValidator.sanitize_translation_output()
+            # This prevents code injection, XSS, and other output-based attacks
+            try:
+                # 直接对LLM输出进行安全清理，防止代码注入和XSS
+                translated_text = SecurityValidator.sanitize_translation_output(
+                    completion.choices[0].message.content  # VALIDATED: Immediately sanitized
+                )
+                print(f"[翻译] 安全验证通过")
+            except OutputValidationError as e:
+                print(f"[翻译] 安全验证失败: {e}")
+                raise Exception(f"翻译输出安全验证失败: {e}")
+            
             print(f"[翻译] 翻译完成,译文长度: {len(translated_text)} 字符")
             print(f"[翻译] 译文: {translated_text[:100]}..." if len(translated_text) > 100 else f"[翻译] 译文: {translated_text}")
             

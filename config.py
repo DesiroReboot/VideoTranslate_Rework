@@ -62,12 +62,35 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # ==================== 下载配置 ====================
 # yt-dlp下载参数
 YT_DLP_OPTIONS = {
-    'format': '30064+30280/30066+30280/100024+30280',  # 720P: avc1/hevc/av01 + 音频 (需FFmpeg合并)
+    # 修复HTTP 412 - 使用更通用的格式选择
+    # 优先选择720P，如果失败则自动降级
+    'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best',
     'outtmpl': str(TEMP_DIR / '%(epoch)s.%(ext)s'),  # 使用时间戳避免中文文件名
     'merge_output_format': 'mp4',  # 合并为mp4格式
     'quiet': False,
     'no_warnings': False,
+    # 修复HTTP 412错误 - 添加B站需要的请求头
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.bilibili.com/',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Origin': 'https://www.bilibili.com',
+    },
+    # 添加Cookie支持（如果需要登录观看的视频）
+    # 'cookiefile': str(PROJECT_ROOT / 'bilibili_cookies.txt'),  # 如果有cookie文件再启用
+    # 其他重要选项
+    'nocheckcertificate': True,  # 忽略SSL证书验证问题
+    'geo_bypass': True,  # 绕过地理限制
 }
+
+# B站Cookie配置（可选 - 用于下载需要登录的视频）
+# 设置方式：
+# 1. 在浏览器登录B站
+# 2. 导出Cookie到文件
+# 3. 取消下面的注释并设置路径
+# BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
 
 # ==================== 音视频参数 ====================
 # 音频采样率

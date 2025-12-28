@@ -151,7 +151,20 @@ VideoTranslate_Rework/
 
 ## 常见问题
 
-### Q: 下载B站视频失败?
+### Q: 下载B站视频失败（HTTP 412错误）?
+A: 
+1. **已修复**: 最新版本已添加正确的请求头,应该能正常下载
+2. **更新yt-dlp**: 运行 `pip install -U yt-dlp`
+3. **如果仍然失败**,可以使用B站Cookie：
+   ```bash
+   # 1. 在Chrome/Edge浏览器登录B站
+   # 2. 安装扩展程序 "Get cookies.txt LOCALLY"
+   # 3. 导出Cookie为 bilibili_cookies.txt 到项目目录
+   # 4. 在 config.py 中取消注释 BILIBILI_COOKIE_FILE
+   ```
+4. **备用方案**: 先手动下载视频,然后使用本地文件模式
+
+### Q: 下载B站视频失败（其他错误）?
 A: 
 1. 检查网络连接
 2. 确认视频URL正确
