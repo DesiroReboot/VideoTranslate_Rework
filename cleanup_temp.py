@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 from pathlib import Path
+from security import PathSecurityValidator
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent
@@ -75,17 +76,16 @@ def cleanup_temp_files(keep_video_path=None):
     print("开始清理临时文件...")
     print("="*60)
     
-    # 安全检查: 验证目录存在且在项目内
+    # 使用PathSecurityValidator验证目录安全性
     try:
-        temp_dir_resolved = TEMP_DIR.resolve()
-        output_dir_resolved = OUTPUT_DIR.resolve()
-        project_root_resolved = PROJECT_ROOT.resolve()
-        
-        # 确保目录在项目范围内
-        temp_dir_resolved.relative_to(project_root_resolved)
-        output_dir_resolved.relative_to(project_root_resolved)
-    except ValueError:
-        print("错误: 检测到目录路径异常，中止清理")
+        temp_dir_resolved = PathSecurityValidator.validate_path_in_project(
+            str(TEMP_DIR), str(PROJECT_ROOT)
+        )
+        output_dir_resolved = PathSecurityValidator.validate_path_in_project(
+            str(OUTPUT_DIR), str(PROJECT_ROOT)
+        )
+    except Exception as e:
+        print(f"错误: 目录路径验证失败 - {e}")
         return
     
     # 清理temp目录
@@ -95,11 +95,12 @@ def cleanup_temp_files(keep_video_path=None):
         kept_count = 0
         
         for item in TEMP_DIR.iterdir():
-            # 安全检查: 确保文件仍在temp目录内（防止符号链接攻击）
+            # 使用PathSecurityValidator验证文件路径
             try:
-                item_resolved = item.resolve()
-                item_resolved.relative_to(temp_dir_resolved)
-            except ValueError:
+                PathSecurityValidator.validate_path_in_project(
+                    str(item), str(TEMP_DIR)
+                )
+            except Exception:
                 print(f"  ⚠ 警告: 跳过项目外路径: {item.name}")
                 continue
             
@@ -131,11 +132,12 @@ def cleanup_temp_files(keep_video_path=None):
         kept_count = 0
         
         for item in OUTPUT_DIR.iterdir():
-            # 安全检查: 确保文件仍在output目录内
+            # 使用PathSecurityValidator验证文件路径
             try:
-                item_resolved = item.resolve()
-                item_resolved.relative_to(output_dir_resolved)
-            except ValueError:
+                PathSecurityValidator.validate_path_in_project(
+                    str(item), str(OUTPUT_DIR)
+                )
+            except Exception:
                 print(f"  ⚠ 警告: 跳过项目外路径: {item.name}")
                 continue
             

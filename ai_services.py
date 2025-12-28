@@ -21,7 +21,7 @@ from config import (
     OSS_ENDPOINT,PROJECT_ROOT,
     OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
 )
-from security import SecurityValidator, OutputValidationError
+from security import SecurityError, OutputValidationError, LLMOutputValidator
 #from dashscope.audio.asr import Recognition
 
 
@@ -130,7 +130,7 @@ class AIServices:
                     
                     # 安全验证：清理ASR输出
                     try:
-                        text = SecurityValidator.sanitize_asr_output(text)
+                        text = LLMOutputValidator.sanitize_asr_output(text)
                         print(f"[ASR] 安全验证通过")
                     except OutputValidationError as e:
                         print(f"[ASR] 安全验证失败: {e}")
@@ -200,17 +200,17 @@ class AIServices:
             )
             
             # OWASP LLM02 防护：LLM输出必须立即验证
-            # SECURITY: LLM output is immediately validated by SecurityValidator.sanitize_translation_output()
+            # SECURITY: LLM output is immediately validated by LLMOutputValidator.sanitize_translation_output()
             # This prevents code injection, XSS, and other output-based attacks
             try:
                 # 直接对LLM输出进行安全清理，防止代码注入和XSS
-                translated_text = SecurityValidator.sanitize_translation_output(
+                translated_text = LLMOutputValidator.sanitize_translation_output(
                     completion.choices[0].message.content  # VALIDATED: Immediately sanitized
                 )
-                print(f"[翻译] 安全验证通过")
+                print("[翻译] 安全验证通过")
             except OutputValidationError as e:
-                print(f"[翻译] 安全验证失败: {e}")
-                raise Exception(f"翻译输出安全验证失败: {e}")
+                print("[翻译] 安全验证失败: {e}")
+                raise SecurityException("翻译输出安全验证失败: {e}")
             
             print(f"[翻译] 翻译完成,译文长度: {len(translated_text)} 字符")
             print(f"[翻译] 译文: {translated_text[:100]}..." if len(translated_text) > 100 else f"[翻译] 译文: {translated_text}")
@@ -382,15 +382,17 @@ class AIServices:
         
         Args:
             file_path: 本地文件路径
+            expiration: 签名URL过期时间（秒），默认3600秒（1小时）
             
         Returns:
-            OSS公网URL
+            OSS签名URL（私有Bucket使用签名URL）
             
         Raises:
             ValueError: 文件路径非法或超出大小限制
             SecurityError: 路径遍历攻击检测
         """
         import oss2
+        import time
         
         # 安全检查1: 验证文件存在且可读
         file_path_obj = Path(file_path)
@@ -430,40 +432,62 @@ class AIServices:
             )
         
         # 初始化OSS客户端
-        auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
-        bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+        try:
+            auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+            # 注意：endpoint不要加https://前缀
+            bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+            print(f"[OSS] 连接配置 - Endpoint: {OSS_ENDPOINT}, Bucket: {OSS_BUCKET_NAME}")
+        except Exception as e:
+            raise Exception(f"OSS客户端初始化失败: {str(e)}")
         
-        # 生成安全的对象名（使用相对路径并规范化）
-        relative_path = resolved_path.relative_to(project_root_resolved)
-        # 移除任何 .. 路径组件
-        object_name = str(relative_path).replace("\\", "/")
+        # 生成规范的对象名（遵循项目规范：video_translate/audio/{timestamp}_{filename}）
+        timestamp = int(time.time() * 1000)  # 使用毫秒时间戳
+        original_filename = file_path_obj.name
+        # 移除中文字符，只保留ASCII字符和数字
+        safe_filename = ''.join(c if c.isalnum() or c in '._-' else '_' for c in original_filename)
+        object_name = f"video_translate/audio/{timestamp}_{safe_filename}"
+        
+        # 安全检查：确保对象名不包含..
         if ".." in object_name:
             raise SecurityError(f"对象名包含非法字符: {object_name}")
         
-        # 上传文件
+        print(f"[OSS] 上传文件: {file_path_obj.name} -> {object_name}")
+        
+        # 上传文件（为Fun-ASR设置公共读权限）
         try:
-            bucket.put_object_from_file(object_name, str(resolved_path))
+            # 设置文件ACL为公共读（Fun-ASR要求）
+            headers = {
+                'x-oss-object-acl': 'public-read'
+            }
+            result = bucket.put_object_from_file(
+                object_name, 
+                str(resolved_path),
+                headers=headers
+            )
+            print(f"[OSS] 上传成功 - RequestID: {result.request_id}")
+            print(f"[OSS] 文件权限: 公共读（Fun-ASR要求）")
+        except oss2.exceptions.OssError as e:
+            # 详细的OSS错误信息
+            raise Exception(
+                f"OSS上传失败: {{\n"
+                f"  状态码: {e.status}\n"
+                f"  错误码: {e.code}\n"
+                f"  消息: {e.message}\n"
+                f"  RequestID: {e.request_id}\n"
+                f"}}"
+            )
         except Exception as e:
             raise Exception(f"OSS上传失败: {str(e)}")
         
-        # 返回公开URL
+        # 生成公开URL（Fun-ASR要求文件公共可读）
+        # 注意：不使用签名URL，因为Fun-ASR需要直接访问
         public_url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_name}"
+        
         print(f"[OSS] 文件上传成功 (大小: {file_size / 1024:.2f}KB)")
+        print(f"[OSS] 公开URL: {public_url}")
+        print(f"[OSS] 原始路径: {object_name}")  # 记录原始路径用于调试
         
         return public_url
-        
-        # 如果需要签名URL（私有bucket），使用以下代码：
-        # signed_url = bucket.sign_url(
-        #     method='GET',
-        #     key=object_name,
-        #     expires=expiration
-        # )
-        # return signed_url
-        
-        # raise NotImplementedError(
-        #     "需要配置阿里云OSS用于音频上传\n"
-        #     "请参考文档: https://help.aliyun.com/document_detail/32026.html"
-        # )
 
     # @staticmethod
     # def _get_signed_url(object_name, expiration=3600):

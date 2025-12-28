@@ -6,6 +6,7 @@ BV号工具模块
 import re
 import requests
 from typing import Optional
+from security import RegexValidator, URLValidator, ResourceValidator
 
 
 def extract_bv_from_url(url: str) -> Optional[str]:
@@ -18,20 +19,8 @@ def extract_bv_from_url(url: str) -> Optional[str]:
     Returns:
         BV号，如果无法提取则返回None
     """
-    # 安全: 限制URL长度防止ReDoS攻击
-    if len(url) > 500:
-        return None
-    
-    # 匹配BV号（保持原始大小写）
-    # 限制BV号长度为10-13个字符，防止贪婪匹配
-    bv_pattern = r'[Bb][Vv][a-zA-Z0-9]{10,13}'
-    match = re.search(bv_pattern, url)
-    if match:
-        bv_raw = match.group(0)
-        # 规范化：只将BV两个字母大写，其余保持原样
-        return 'BV' + bv_raw[2:]
-    
-    return None
+    # 使用RegexValidator防止ReDoS攻击
+    return RegexValidator.extract_bv_safe(url)
 
 
 def av_to_bv(av_number: int) -> str:
@@ -95,21 +84,18 @@ def resolve_short_link(short_url: str, timeout: int = 5) -> Optional[str]:
         if not short_url.startswith('http'):
             short_url = 'https://' + short_url
         
-        # 只允许b23.tv域名
-        # if 'b23.tv' not in short_url:
-        #     print("错误: 仅支持b23.tv短链接")
-        #     return None
+        # 使用URLValidator验证短链接
+        URLValidator.validate_short_link(short_url)
         
-        # 限制超时时间，防止挂起
-        if timeout > 10:
-            timeout = 10
+        # 使用ResourceValidator限制超时时间
+        timeout = ResourceValidator.validate_timeout(timeout, max_timeout=10.0)
         
         # 发送HEAD请求，不下载内容
         response = requests.head(short_url, allow_redirects=True, timeout=timeout)
         
         # 验证重定向后的URL也是B站域名
-        if 'bilibili.com' not in response.url:
-            print(f"警告: 短链接重定向到非哔哩哔哩域名: {response.url}")
+        if not URLValidator.validate_url_domain(response.url):
+            print(f"警告: 短链接重定向到非B站域名: {response.url}")
             return None
         
         return response.url

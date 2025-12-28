@@ -20,6 +20,7 @@ from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
 from cleanup_temp import cleanup_temp_files
+from security import InputValidator
 
 
 class VideoTranslator:
@@ -173,26 +174,17 @@ def main():
     target_language = sys.argv[2]
     source_language = sys.argv[3] if len(sys.argv) > 3 else "auto"
     
-    # 安全验证: 限制输入长度
-    if len(url_or_path) > 1000:
-        print("错误: URL或路径过长")
-        sys.exit(1)
-    
-    # 安全验证: 语言参数白名单
-    allowed_languages = [
-        "Chinese", "English", "Japanese", "Korean", "Spanish", "French",
-        "German", "Russian", "Italian", "Portuguese", "Arabic", "Hindi",
-        "auto"  # 自动检测
-    ]
-    
-    if target_language not in allowed_languages:
-        print(f"错误: 不支持的目标语言 '{target_language}'")
-        print(f"支持的语言: {', '.join(allowed_languages)}")
-        sys.exit(1)
-    
-    if source_language not in allowed_languages:
-        print(f"错误: 不支持的源语言 '{source_language}'")
-        print(f"支持的语言: {', '.join(allowed_languages)}")
+    # 使用InputValidator进行安全验证
+    try:
+        # 验证URL/路径长度
+        url_or_path = InputValidator.validate_url_length(url_or_path, max_length=1000)
+        
+        # 验证语言参数
+        target_language = InputValidator.validate_language(target_language)
+        source_language = InputValidator.validate_language(source_language)
+        
+    except ValueError as e:
+        print(f"错误: {e}")
         sys.exit(1)
     
     try:
