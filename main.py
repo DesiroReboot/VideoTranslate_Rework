@@ -22,22 +22,37 @@ from ai_services import AIServices
 from cleanup_temp import cleanup_temp_files
 from security import InputValidator
 
+# 翻译风格常量定义
+VALID_TRANSLATION_STYLES = ["humorous", "serious", "educational", "entertainment", "news", "auto"]
+
 
 class VideoTranslator:
     """视频翻译器主类"""
     
-    def __init__(self):
-        """初始化视频翻译器"""
+    def __init__(self, translation_style: str = "auto"):
+        """初始化视频翻译器
+        
+        Args:
+            translation_style: 翻译风格，可选值：humorous, serious, educational, entertainment, news, auto
+        """
         # 验证配置
         validate_config()
         
         # 初始化AI服务
-        self.ai_services = AIServices()
+        self.ai_services = AIServices(translation_style)
         
         print("\n" + "="*60)
-        print("视频翻译系统 v1.0")
+        print("视频翻译系统 v1.1")
         print("支持: B站视频下载 | 语音识别 | 机器翻译 | 语音合成")
+        print("新增: 多风格翻译模式")
         print("="*60 + "\n")
+        
+        # 显示当前翻译模式信息
+        mode_info = self.ai_services.get_translation_mode_info()
+        print(f"当前翻译模式: {mode_info['name']} ({mode_info['style']})")
+        print(f"模式描述: {mode_info['description']}")
+        print(f"模型参数: {mode_info['model_params']}")
+        print()
     
     def translate_video(self, url_or_path: str, target_language: str,
                        source_language: str = "auto") -> str:
@@ -155,24 +170,38 @@ def main():
     if len(sys.argv) < 3:
         print("""
 使用方法:
-    python main.py <视频URL或路径> <目标语言> [源语言]
+    python main.py <视频URL或路径> <目标语言> [翻译风格]
 
 示例:
-    # 翻译B站视频为英文
+    # 翻译B站视频为英文（自动风格）
     python main.py "https://www.bilibili.com/video/BVxxxxxxxxx" English
     
-    # 翻译本地视频为日文
-    python main.py "video.mp4" Japanese Chinese
+    # 翻译本地视频为日文（幽默风格）
+    python main.py "video.mp4" Japanese humorous
+    
+    # 翻译教育视频为英文（教育风格）
+    python main.py "education_video.mp4" English educational
     
 支持的语言:
     Chinese, English, Japanese, Korean, Spanish, French, 
     German, Russian, Italian, Portuguese 等92种语言
+    
+翻译风格:
+    humorous    - 幽默风格，保留原视频的幽默感和轻松氛围
+    serious     - 正经风格，适用于正式、严肃的内容
+    educational - 教育风格，适用于教学、科普类内容
+    entertainment- 娱乐风格，适用于娱乐、综艺类内容
+    news        - 新闻风格，适用于新闻、资讯类内容
+    auto        - 自动检测，根据内容自动选择最适合的风格（默认）
+    
+注意: 源语言将自动识别，无需手动指定
         """)
         sys.exit(1)
     
     url_or_path = sys.argv[1]
     target_language = sys.argv[2]
-    source_language = sys.argv[3] if len(sys.argv) > 3 else "auto"
+    source_language = "auto"  # 源语言固定为自动识别
+    translation_style = sys.argv[3] if len(sys.argv) > 3 else "auto"
     
     # 使用InputValidator进行安全验证
     try:
@@ -181,7 +210,11 @@ def main():
         
         # 验证语言参数
         target_language = InputValidator.validate_language(target_language)
-        source_language = InputValidator.validate_language(source_language)
+        # source_language 固定为 "auto"，无需验证
+        
+        # 验证翻译风格参数
+        if translation_style not in VALID_TRANSLATION_STYLES:
+            raise ValueError(f"无效的翻译风格: {translation_style}。可选值: {', '.join(VALID_TRANSLATION_STYLES)}")
         
     except ValueError as e:
         print(f"错误: {e}")
@@ -189,7 +222,7 @@ def main():
     
     try:
         # 创建翻译器并执行
-        translator = VideoTranslator()
+        translator = VideoTranslator(translation_style)
         output_video = translator.translate_video(
             url_or_path,
             target_language,

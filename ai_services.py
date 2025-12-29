@@ -22,6 +22,8 @@ from config import (
     OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
 )
 from security import SecurityError, OutputValidationError, LLMOutputValidator
+from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
+from translation_dictionary import apply_translation_dictionary
 #from dashscope.audio.asr import Recognition
 
 
@@ -34,8 +36,12 @@ class SecurityError(Exception):
 class AIServices:
     """AI服务集成类"""
     
-    def __init__(self):
-        """初始化AI服务"""
+    def __init__(self, translation_style: str = "auto"):
+        """初始化AI服务
+        
+        Args:
+            translation_style: 翻译风格，可选值：humorous, serious, educational, entertainment, news, auto
+        """
         #from config import DASHSCOPE_API_KEY
         if not DASHSCOPE_API_KEY:
             raise ValueError("未配置DASHSCOPE_API_KEY,请在环境变量中设置")
@@ -51,6 +57,11 @@ class AIServices:
             api_key=DASHSCOPE_API_KEY,
             base_url=f"{DASHSCOPE_BASE_URL}/compatible-mode/v1"
         )
+        
+        # 初始化翻译模式管理器
+        self.mode_manager = TranslationModeManager()
+        self.translation_style = get_translation_mode(translation_style)
+        self.mode_manager.set_mode(self.translation_style)
     
     def speech_to_text(self, audio_path: str) -> str:
         """
@@ -162,6 +173,32 @@ class AIServices:
             print(f"\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
             return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和OSS后重试。"
     
+    def set_translation_mode(self, style: str) -> None:
+        """设置翻译模式
+        
+        Args:
+            style: 翻译风格，可选值：humorous, serious, educational, entertainment, news, auto
+        """
+        self.translation_style = get_translation_mode(style)
+        self.mode_manager.set_mode(self.translation_style)
+    
+    def get_translation_mode_info(self) -> Dict[str, Any]:
+        """获取当前翻译模式信息"""
+        current_mode = self.mode_manager.get_current_mode()
+        if not current_mode:
+            current_mode = self.mode_manager.get_mode(VideoStyle.AUTO)
+        
+        return {
+            "style": self.translation_style.value,
+            "name": current_mode.name,
+            "description": current_mode.description,
+            "model_params": current_mode.get_model_params()
+        }
+    
+    def list_translation_modes(self) -> None:
+        """列出所有可用的翻译模式"""
+        self.mode_manager.list_modes()
+    
     def translate_text(self, text: str, target_language: str, 
                       source_language: str = "auto") -> str:
         """
@@ -182,21 +219,36 @@ class AIServices:
         print(f"[翻译] 原文长度: {len(text)} 字符")
         
         try:
-            # 加载系统提示词
-            system_prompt = load_translation_prompt(target_language)
-            print(f"[翻译] 使用自定义Prompt")
+            # 获取当前翻译模式
+            current_mode = self.mode_manager.get_current_mode()
+            if not current_mode:
+                current_mode = self.mode_manager.get_mode(VideoStyle.AUTO)
+            
+            # 格式化系统提示词
+            system_prompt = self.mode_manager.format_prompt(
+                current_mode, source_language, target_language
+            )
+            
+            # 构建用户消息
+            user_message = f"请将以下{source_language}文本翻译成{target_language}：\n\n{text}"
+            
+            # 获取模型参数
+            model_params = current_mode.get_model_params()
+            
+            print(f"[翻译] 使用模式: {current_mode.name}")
+            print(f"[翻译] 模型参数: temperature={model_params.get('temperature', 0.3)}, top_p={model_params.get('top_p', 0.8)}")
             
             # 构建消息
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
+                {"role": "user", "content": user_message}
             ]
             
             # 调用Qwen-max API
             completion = self.openai_client.chat.completions.create(
                 model=MT_MODEL,
                 messages=messages,
-                temperature=0.3,  # 较低的温度以保证翻译稳定性
+                **model_params
             )
             
             # OWASP LLM02 防护：LLM输出必须立即验证
@@ -210,12 +262,26 @@ class AIServices:
                 print("[翻译] 安全验证通过")
             except OutputValidationError as e:
                 print("[翻译] 安全验证失败: {e}")
-                raise SecurityException("翻译输出安全验证失败: {e}")
+                raise SecurityError("翻译输出安全验证失败: {e}")
             
             print(f"[翻译] 翻译完成,译文长度: {len(translated_text)} 字符")
             print(f"[翻译] 译文: {translated_text[:100]}..." if len(translated_text) > 100 else f"[翻译] 译文: {translated_text}")
             
-            return translated_text
+            # 应用翻译词典修正特定词汇
+            print("[翻译] 应用词典修正...")
+            corrected_text = apply_translation_dictionary(
+                translated_text, 
+                source_language=source_language, 
+                target_language=target_language
+            )
+            
+            if corrected_text != translated_text:
+                print(f"[翻译] 词典修正完成,修正后长度: {len(corrected_text)} 字符")
+                print(f"[翻译] 修正后: {corrected_text[:100]}..." if len(corrected_text) > 100 else f"[翻译] 修正后: {corrected_text}")
+            else:
+                print("[翻译] 无需词典修正")
+            
+            return corrected_text
             
         except Exception as e:
             raise Exception(f"文本翻译失败: {str(e)}")
