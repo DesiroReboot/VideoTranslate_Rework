@@ -3,11 +3,12 @@
 负责音频提取、替换等操作
 """
 
+import os
 from pathlib import Path
 from typing import Optional
 from moviepy import VideoFileClip, AudioFileClip
 from config import TEMP_DIR, OUTPUT_DIR, AUDIO_FORMAT, VIDEO_CODEC, AUDIO_CODEC
-from security import FileValidator
+from security import FileValidator, PathSecurityValidator, SecurityError, ResourceValidator
 
 
 class AudioProcessor:
@@ -33,12 +34,27 @@ class AudioProcessor:
 
         try:
             # 安全检查1: 验证输入参数
-            if not video_path or not video_path.strip():
-                raise ValueError("视频文件路径不能为空")
+            if not video_path or not isinstance(video_path, str):
+                raise ValueError("视频文件路径参数无效")
             
-            # 安全检查2-4: 使用FileValidator验证视频文件
+            # 安全检查2: 路径安全验证
+            project_root = os.getcwd()
+            PathSecurityValidator.validate_path_in_project(video_path, project_root)
+            
+            # 安全检查3: 文件名长度限制
+            if len(Path(video_path).name) > 255:
+                raise SecurityError("文件名过长")
+            
+            # 安全检查4-6: 使用FileValidator验证视频文件
             video_info = FileValidator.validate_video_file(video_path)
             video_path_obj = video_info['path']
+            
+            # 安全检查7: 文件权限检查
+            if not os.access(video_path, os.R_OK):
+                raise SecurityError("视频文件不可读")
+            
+            # 安全检查8: 资源限制验证
+            ResourceValidator.validate_timeout(300.0, max_timeout=600.0)  # 5分钟超时
             
             # 加载视频
             video = VideoFileClip(str(video_path_obj))

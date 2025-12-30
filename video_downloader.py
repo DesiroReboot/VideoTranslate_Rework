@@ -3,12 +3,14 @@
 支持B站视频URL下载和本地文件处理
 """
 
+import os
 import re
 from pathlib import Path
 from typing import Optional, Tuple
 import yt_dlp
 from config import YT_DLP_OPTIONS, TEMP_DIR
 from bv_utils import normalize_bilibili_url, extract_bv_from_url
+from security import PathSecurityValidator, URLValidator, FileValidator, SecurityError
 
 
 class VideoDownloader:
@@ -19,6 +21,7 @@ class VideoDownloader:
         r'https?://(?:www\.)?bilibili\.com/video/[Bb][Vv][\w]+',
         r'https?://(?:www\.)?bilibili\.com/video/av[\d]+',
         r'https?://b23\.tv/[\w]+',
+        r'^[Bb][Vv][\w]+$',  # 纯BV号格式
     ]
     
     @staticmethod
@@ -40,16 +43,45 @@ class VideoDownloader:
     @staticmethod
     def is_local_file(path: str) -> bool:
         """
-        检查是否为本地文件路径
+        检查是否为本地视频文件
         
         Args:
             path: 文件路径
             
         Returns:
-            是否为有效的本地MP4文件
+            是否为有效的本地视频文件
+            
+        Raises:
+            SecurityError: 安全检查失败
         """
-        p = Path(path)
-        return p.exists() and p.is_file() and p.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']
+        # 1. 基础参数验证
+        if not path or not isinstance(path, str):
+            return False
+        
+        try:
+            # 2. 路径安全验证
+            project_root = os.getcwd()
+            PathSecurityValidator.validate_path_in_project(path, project_root)
+            
+            # 3. 文件安全验证
+            file_info = FileValidator.validate_video_file(path)
+            
+            # 4. 符号链接安全检查
+            p = Path(path)
+            if p.is_symlink():
+                # 检查符号链接目标是否在项目范围内
+                target = p.resolve()
+                if not str(target).startswith(str(Path.cwd())):
+                    raise SecurityError("符号链接指向项目目录外部")
+            
+            # 5. 文件权限检查
+            if not os.access(path, os.R_OK):
+                raise SecurityError("文件不可读")
+            
+            return True
+            
+        except (SecurityError, ValueError, OSError):
+            return False
     
     @staticmethod
     def download_bilibili_video(url: str, output_path: Optional[str] = None) -> Tuple[str, Optional[str]]:
@@ -65,9 +97,26 @@ class VideoDownloader:
             
         Raises:
             ValueError: URL无效或下载失败
+            SecurityError: 安全检查失败
         """
+        # 1. URL参数验证
+        if not url or not isinstance(url, str):
+            raise ValueError("URL参数无效")
+        
+        # 2. URL安全验证
+        if not URLValidator.validate_url_domain(url):
+            raise SecurityError(f"URL域名不在白名单中: {url}")
+        
         if not VideoDownloader.is_bilibili_url(url):
             raise ValueError(f"无效的B站URL: {url}")
+        
+        # 3. 输出路径安全验证
+        if output_path:
+            project_root = os.getcwd()
+            PathSecurityValidator.validate_path_in_project(output_path, project_root)
+            # 确保输出目录存在
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
         
         # 提取BV号
         bv_id, normalized_url = normalize_bilibili_url(url)
@@ -131,8 +180,14 @@ class VideoDownloader:
         """
         # 判断是URL还是本地文件
         if VideoDownloader.is_bilibili_url(url_or_path):
-            # 下载B站视频
-            return VideoDownloader.download_bilibili_video(url_or_path)
+            # 检查是否为纯BV号，如果是则转换为完整URL
+            if re.match(r'^[Bb][Vv][\w]+$', url_or_path):
+                full_url = f"https://www.bilibili.com/video/{url_or_path}"
+                print(f"检测到纯BV号，转换为完整URL: {full_url}")
+                return VideoDownloader.download_bilibili_video(full_url)
+            else:
+                # 下载B站视频
+                return VideoDownloader.download_bilibili_video(url_or_path)
         
         elif VideoDownloader.is_local_file(url_or_path):
             # 本地文件,直接返回

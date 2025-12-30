@@ -20,7 +20,7 @@ from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
 from cleanup_temp import cleanup_temp_files
-from security import InputValidator
+from security import InputValidator, SecurityError, RegexValidator
 
 # 翻译风格常量定义
 VALID_TRANSLATION_STYLES = ["humorous", "serious", "educational", "entertainment", "news", "auto"]
@@ -205,19 +205,44 @@ def main():
     
     # 使用InputValidator进行安全验证
     try:
-        # 验证URL/路径长度
+        # 1. 参数数量验证
+        if len(sys.argv) < 3 or len(sys.argv) > 4:
+            raise ValueError(f"参数数量错误。用法: python main.py <URL/文件路径> <目标语言> [翻译风格]\n"
+                           f"示例: python main.py \"https://www.bilibili.com/video/BVxxx\" Japanese serious")
+        
+        # 2. 编码格式验证 - 确保参数是有效的UTF-8字符串
+        try:
+            url_or_path.encode('utf-8')
+            target_language.encode('utf-8')
+            translation_style.encode('utf-8')
+        except UnicodeEncodeError:
+            raise ValueError("参数包含无效的字符编码，请使用UTF-8编码")
+        
+        # 3. 特殊字符过滤 - 防止命令注入
+        dangerous_chars = ['|', '&', ';', '$', '`', '(', ')', '<', '>', '"', "'"]
+        for char in dangerous_chars:
+            if char in url_or_path:
+                raise ValueError(f"URL/路径包含危险字符: {char}")
+        
+        # 4. URL/路径长度验证
         url_or_path = InputValidator.validate_url_length(url_or_path, max_length=1000)
         
-        # 验证语言参数
+        # 5. 语言参数验证
         target_language = InputValidator.validate_language(target_language)
         # source_language 固定为 "auto"，无需验证
         
-        # 验证翻译风格参数
+        # 6. 翻译风格参数验证
         if translation_style not in VALID_TRANSLATION_STYLES:
             raise ValueError(f"无效的翻译风格: {translation_style}。可选值: {', '.join(VALID_TRANSLATION_STYLES)}")
         
+        # 7. 正则表达式输入长度验证（防止ReDoS）
+        RegexValidator.validate_input_length_for_regex(url_or_path, max_length=500)
+        
     except ValueError as e:
-        print(f"错误: {e}")
+        print(f"参数验证失败: {e}")
+        sys.exit(1)
+    except SecurityError as e:
+        print(f"安全检查失败: {e}")
         sys.exit(1)
     
     try:

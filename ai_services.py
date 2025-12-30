@@ -21,7 +21,7 @@ from config import (
     OSS_ENDPOINT,PROJECT_ROOT,
     OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
 )
-from security import SecurityError, OutputValidationError, LLMOutputValidator
+from security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
 from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
 from translation_dictionary import apply_translation_dictionary
 #from dashscope.audio.asr import Recognition
@@ -42,9 +42,25 @@ class AIServices:
         Args:
             translation_style: 翻译风格，可选值：humorous, serious, educational, entertainment, news, auto
         """
-        #from config import DASHSCOPE_API_KEY
+        # 1. API密钥格式验证
         if not DASHSCOPE_API_KEY:
             raise ValueError("未配置DASHSCOPE_API_KEY,请在环境变量中设置")
+        
+        # 验证API密钥格式 (假设是sk-开头的格式)
+        if not DASHSCOPE_API_KEY.startswith('sk-') or len(DASHSCOPE_API_KEY) < 20:
+            raise SecurityError("API密钥格式无效")
+        
+        # 2. 翻译风格参数验证
+        translation_style = InputValidator.validate_text_input(
+            translation_style, 
+            max_length=50, 
+            min_length=1, 
+            context="翻译风格"
+        )
+        
+        # 3. 基础URL验证
+        if not DASHSCOPE_BASE_URL or not DASHSCOPE_BASE_URL.startswith('https://'):
+            raise SecurityError("DASHSCOPE_BASE_URL配置无效")
         
         # 设置DashScope配置
         dashscope.api_key = DASHSCOPE_API_KEY
@@ -55,7 +71,8 @@ class AIServices:
         # 初始化OpenAI客户端(用于调用Qwen兼容接口)
         self.openai_client = OpenAI(
             api_key=DASHSCOPE_API_KEY,
-            base_url=f"{DASHSCOPE_BASE_URL}/compatible-mode/v1"
+            base_url=f"{DASHSCOPE_BASE_URL}/compatible-mode/v1",
+            timeout=ResourceValidator.validate_timeout(120.0, max_timeout=300.0)  # 120秒超时
         )
         
         # 初始化翻译模式管理器
@@ -76,9 +93,19 @@ class AIServices:
             
         Raises:
             Exception: 识别失败
+            SecurityError: 安全检查失败
         """
+        # 1. 参数验证
+        if not audio_path or not isinstance(audio_path, str):
+            raise ValueError("音频路径参数无效")
+        
+        # 2. 音频文件安全验证
+        from security import FileValidator
+        audio_info = FileValidator.validate_audio_file(audio_path)
+        
         print(f"\n[ASR] 开始语音识别: {audio_path}")
         print(f"[ASR] 模型: {ASR_MODEL}")
+        print(f"[ASR] 音频文件大小: {audio_info['size'] / (1024*1024):.2f}MB")
         
         try:
             # 上传音频到OSS获取公网访问URL
@@ -244,12 +271,29 @@ class AIServices:
                 {"role": "user", "content": user_message}
             ]
             
-            # 调用Qwen-max API
-            completion = self.openai_client.chat.completions.create(
-                model=MT_MODEL,
-                messages=messages,
-                **model_params
-            )
+            # 调用Qwen-max API，添加重试机制
+            max_retries = 3
+            retry_delay = 2  # 秒
+            
+            for attempt in range(max_retries):
+                try:
+                    completion = self.openai_client.chat.completions.create(
+                        model=MT_MODEL,
+                        messages=messages,
+                        **model_params
+                    )
+                    break  # 成功则跳出重试循环
+                except Exception as e:
+                    if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                        if attempt < max_retries - 1:
+                            print(f"[翻译] 请求超时，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # 指数退避
+                            continue
+                        else:
+                            raise Exception(f"翻译请求超时，已重试{max_retries}次: {str(e)}")
+                    else:
+                        raise  # 非超时错误直接抛出
             
             # OWASP LLM02 防护：LLM输出必须立即验证
             # SECURITY: LLM output is immediately validated by LLMOutputValidator.sanitize_translation_output()
