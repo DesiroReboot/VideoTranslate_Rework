@@ -124,6 +124,30 @@ ENABLE_TRANSLATION_SCORING = True
 SCORING_RESULTS_DIR = OUTPUT_DIR / "scoring_results"
 SCORING_RESULTS_DIR.mkdir(exist_ok=True)
 
+# ==================== ASR质量评分配置 ====================
+# ASR评分阈值 - 低于此分数将触发重试
+ASR_SCORE_THRESHOLD = 60
+
+# ASR最大重试次数
+ASR_MAX_RETRIES = 1
+
+# 是否启用ASR质量评分
+ENABLE_ASR_SCORING = True
+
+# ASR评分结果保存目录
+ASR_SCORING_RESULTS_DIR = OUTPUT_DIR / "asr_scoring_results"
+ASR_SCORING_RESULTS_DIR.mkdir(exist_ok=True)
+
+# ASR常见错误映射 - 用于校正识别结果
+ASR_ERROR_MAPPINGS = {
+    "阿萨": {
+        "corrected": "阿SIR",
+        "context_keywords": ["警察", "抓", "追", "查", "办案", "执法", "嫌疑", "罪犯"],
+        "description": "ASR将'阿SIR'错误识别为'阿萨'"
+    },
+    # 可以添加更多ASR错误映射
+}
+
 def load_translation_prompt(target_language: str) -> str:
     """
     加载翻译系统提示词并替换目标语言

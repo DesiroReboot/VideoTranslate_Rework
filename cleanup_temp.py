@@ -153,6 +153,12 @@ def cleanup_temp_files(keep_video_path=None):
                 kept_count += 1
                 continue
             
+            # 保留asr_scoring_results目录
+            if item.is_dir() and item.name == "asr_scoring_results":
+                print(f"  ⊙ 保留: {item.name}")
+                kept_count += 1
+                continue
+            
             # 保留所有翻译后的视频文件
             if item.is_file() and is_translated_video(item.name):
                 print(f"  ⊙ 保留: {item.name}")

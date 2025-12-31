@@ -18,24 +18,18 @@ from config import (
     ASR_MODEL, MT_MODEL, TTS_MODEL,
     TTS_VOICE_MAP, DEFAULT_VOICE,
     TEMP_DIR, load_translation_prompt,
-    OSS_ENDPOINT,PROJECT_ROOT,
-    OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME
+    OSS_ENDPOINT, PROJECT_ROOT,
+    OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET_NAME,
+    ENABLE_TRANSLATION_SCORING, SCORING_RESULTS_DIR,
+    ASR_SCORE_THRESHOLD, ASR_MAX_RETRIES, ENABLE_ASR_SCORING,
+    ASR_SCORING_RESULTS_DIR
 )
 from security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
 from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
 from translation_dictionary import apply_translation_dictionary
 from translation_scores import TranslationScorer, TranslationScore
-from config import (
-    DASHSCOPE_API_KEY, 
-    DASHSCOPE_BASE_URL,
-    # test_api_key,
-    ASR_MODEL, MT_MODEL, TTS_MODEL,
-    TTS_VOICE_MAP, DEFAULT_VOICE,
-    TEMP_DIR, load_translation_prompt,
-    OSS_ENDPOINT,PROJECT_ROOT,
-    OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME,
-    ENABLE_TRANSLATION_SCORING, SCORING_RESULTS_DIR
-)
+from asr_scorer import AsrScorer, AsrScore
+
 
 
 # 安全异常类
@@ -98,6 +92,14 @@ class AIServices:
         else:
             self.scorer = None
             print(f"[初始化] 翻译质量评分器已禁用")
+        
+        # 初始化ASR质量评分器
+        if ENABLE_ASR_SCORING:
+            self.asr_scorer = AsrScorer()
+            print(f"[初始化] ASR质量评分器已启用")
+        else:
+            self.asr_scorer = None
+            print(f"[初始化] ASR质量评分器已禁用")
     
     def speech_to_text(self, audio_path: str) -> str:
         """
@@ -126,98 +128,121 @@ class AIServices:
         print(f"[ASR] 模型: {ASR_MODEL}")
         print(f"[ASR] 音频文件大小: {audio_info['size'] / (1024*1024):.2f}MB")
         
-        try:
-            # 上传音频到OSS获取公网访问URL
-            print(f"[ASR] 上传音频到OSS...")
-            audio_url = self._upload_to_oss(audio_path)
-            print(f"[ASR] OSS URL生成成功")
-            
-            print(f"[ASR] 提交语音识别任务...")
-            
-            # 使用Fun-ASR文件识别API
-            from http import HTTPStatus
-            from dashscope.audio.asr import Transcription
-            
-            # 调用异步文件识别
-            task_response = Transcription.async_call(
-                model=ASR_MODEL,
-                file_urls=[audio_url],
-                language_hints = ['zh', 'en'],  # 支持中英文
-            )
-            
-            if task_response.status_code != HTTPStatus.OK:
-                raise Exception(f"ASR任务提交失败: {task_response.message}")
-            
-            task_id = task_response.output['task_id']
-            print(f"[ASR] 任务ID: {task_id}, 等待识别完成...")
-            
-            # 轮询任务状态
-            import time
-            max_retries = 60  # 最多等待60次
-            for i in range(max_retries):
-                result_response = Transcription.wait(task=task_id)
+        # ASR重试循环
+        for retry_count in range(ASR_MAX_RETRIES + 1):
+            print(f"[ASR] 第{retry_count + 1}次尝试 (最大{ASR_MAX_RETRIES + 1}次)")
+            try:
+                # 上传音频到OSS获取公网访问URL
+                print(f"[ASR] 上传音频到OSS...")
+                audio_url = self._upload_to_oss(audio_path)
+                print(f"[ASR] OSS URL生成成功")
                 
-                if result_response.status_code != HTTPStatus.OK:
-                    raise Exception(f"ASR任务查询失败: {result_response.message}")
+                print(f"[ASR] 提交语音识别任务...")
                 
-                task_status = result_response.output['task_status']
+                # 使用Fun-ASR文件识别API
+                from http import HTTPStatus
+                from dashscope.audio.asr import Transcription
                 
-                if task_status == 'SUCCEEDED':
-                    # 获取识别结果
-                    transcription_url = result_response.output['results'][0]['transcription_url']
-                    print(f"[ASR] 识别完成, 下载结果...")
-                    
-                    # 下载并解析结果
-                    import requests
-                    import json
-                    resp = requests.get(transcription_url)
-                    resp.raise_for_status()
-                    result_data = resp.json()
-                    
-                    # 提取文本
-                    text = result_data.get('transcripts', [{}])[0].get('text', '')
-                    
-                    if not text:
-                        # 尝试从句子中提取
-                        sentences = result_data.get('transcripts', [{}])[0].get('sentences', [])
-                        text = ' '.join([s.get('text', '') for s in sentences])
-                    
-                    print(f"[ASR] 识别成功,文本长度: {len(text)} 字符")
-                    print(f"[ASR] 识别文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 识别文本: {text}")
-                    
-                    # 安全验证：清理ASR输出
-                    try:
-                        text = LLMOutputValidator.sanitize_asr_output(text)
-                        print(f"[ASR] 安全验证通过")
-                    except OutputValidationError as e:
-                        print(f"[ASR] 安全验证失败: {e}")
-                        raise Exception(f"ASR输出安全验证失败: {e}")
-                    
-                    return text
-                    
-                elif task_status == 'FAILED':
-                    raise Exception(f"ASR任务失败: {result_response.output.get('message', 'Unknown error')}")
+                # 调用异步文件识别
+                task_response = Transcription.async_call(
+                    model=ASR_MODEL,
+                    file_urls=[audio_url],
+                    language_hints = ['zh', 'en'],  # 支持中英文
+                )
                 
-                elif task_status in ['PENDING', 'RUNNING']:
-                    print(f"[ASR] 任务状态: {task_status}, 等待中... ({i+1}/{max_retries})")
-                    time.sleep(2)  # 等待2秒
-                else:
-                    print(f"[ASR] 未知状态: {task_status}")
-                    time.sleep(2)
-            
-            raise Exception("ASR任务超时")
+                if task_response.status_code != HTTPStatus.OK:
+                    raise Exception(f"ASR任务提交失败: {task_response.message}")
                 
-        except Exception as e:
-            print(f"[ASR] 错误: {str(e)}")
-            print(f"[ASR] 提示: 如果识别失败,请确保:")
-            print(f"      1. OSS bucket已配置且文件上传成功")
-            print(f"      2. 音频格式正确 (支持MP3, WAV等)")
-            print(f"      3. API Key有效且有足够额度")
-            print(f"      4. 音频时长不超过限制")
-            
-            # 返回占位文本用于测试
-            print(f"\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
-            return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和OSS后重试。"
+                task_id = task_response.output['task_id']
+                print(f"[ASR] 任务ID: {task_id}, 等待识别完成...")
+                
+                # 轮询任务状态
+                import time
+                max_retries = 60  # 最多等待60次
+                for i in range(max_retries):
+                    result_response = Transcription.wait(task=task_id)
+                    
+                    if result_response.status_code != HTTPStatus.OK:
+                        raise Exception(f"ASR任务查询失败: {result_response.message}")
+                    
+                    task_status = result_response.output['task_status']
+                    
+                    if task_status == 'SUCCEEDED':
+                        # 获取识别结果
+                        transcription_url = result_response.output['results'][0]['transcription_url']
+                        print(f"[ASR] 识别完成, 下载结果...")
+                        
+                        # 下载并解析结果
+                        import requests
+                        import json
+                        resp = requests.get(transcription_url)
+                        resp.raise_for_status()
+                        result_data = resp.json()
+                        
+                        # 提取文本
+                        text = result_data.get('transcripts', [{}])[0].get('text', '')
+                        
+                        if not text:
+                            # 尝试从句子中提取
+                            sentences = result_data.get('transcripts', [{}])[0].get('sentences', [])
+                            text = ' '.join([s.get('text', '') for s in sentences])
+                        
+                        print(f"[ASR] 识别成功,文本长度: {len(text)} 字符")
+                        print(f"[ASR] 识别文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 识别文本: {text}")
+                        
+                        # 安全验证：清理ASR输出
+                        try:
+                            text = LLMOutputValidator.sanitize_asr_output(text)
+                            print(f"[ASR] 安全验证通过")
+                        except OutputValidationError as e:
+                            print(f"[ASR] 安全验证失败: {e}")
+                            raise Exception(f"ASR输出安全验证失败: {e}")
+                        
+                        # ASR质量评分和校正
+                        if self.asr_scorer:
+                            print(f"[ASR] 开始质量评分和校正...")
+                            original_text = text  # 保存原始文本用于评分和记录
+                            score_result = self.asr_scorer.score_asr_result(original_text)
+                            
+                            print(f"[ASR] 识别质量评分: {score_result.overall_score}/{100}")
+                            if score_result.corrections:
+                                print(f"[ASR] 发现{len(score_result.corrections)}处可能的识别错误，正在校正...")
+                                text = self.asr_scorer.apply_corrections(original_text, score_result.corrections)
+                                print(f"[ASR] 校正后文本: {text[:100]}..." if len(text) > 100 else f"[ASR] 校正后文本: {text}")
+                            
+                            # 保存评分结果
+                            self._save_asr_score_result(original_text, score_result, audio_path=audio_path)
+                            
+                            # 检查是否需要重试
+                            if score_result.should_retry and retry_count < ASR_MAX_RETRIES:
+                                print(f"[ASR] 识别质量低于阈值({ASR_SCORE_THRESHOLD})，将进行重试")
+                                continue  # 重试识别
+                        
+                        return text
+                        
+                    elif task_status == 'FAILED':
+                        raise Exception(f"ASR任务失败: {result_response.output.get('message', 'Unknown error')}")
+                    
+                    elif task_status in ['PENDING', 'RUNNING']:
+                        print(f"[ASR] 任务状态: {task_status}, 等待中... ({i+1}/{max_retries})")
+                        time.sleep(2)  # 等待2秒
+                    else:
+                        print(f"[ASR] 未知状态: {task_status}")
+                        time.sleep(2)
+                
+                raise Exception("ASR任务超时")
+                    
+            except Exception as e:
+                print(f"[ASR] 错误: {str(e)}")
+                print(f"[ASR] 提示: 如果识别失败,请确保:")
+                print(f"      1. OSS bucket已配置且文件上传成功")
+                print(f"      2. 音频格式正确 (支持MP3, WAV等)")
+                print(f"      3. API Key有效且有足够额度")
+                print(f"      4. 音频时长不超过限制")
+                
+                # 返回占位文本用于测试
+                print(f"\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
+                return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和OSS后重试。"
     
     def set_translation_mode(self, style: str) -> None:
         """设置翻译模式
@@ -625,6 +650,60 @@ class AIServices:
             
         except Exception as e:
             print(f"[评分] 保存评分结果失败: {str(e)}")
+    
+    def _save_asr_score_result(
+        self, 
+        asr_text: str, 
+        score: AsrScore,
+        context: Optional[str] = None,
+        audio_path: Optional[str] = None
+    ) -> None:
+        """
+        保存ASR评分结果
+        
+        Args:
+            asr_text: ASR识别文本
+            score: ASR评分结果
+            context: 可选上下文信息
+            audio_path: 可选音频文件路径
+        """
+        try:
+            import json
+            import time
+            
+            # 生成文件名
+            timestamp = int(time.time())
+            filename = f"asr_score_{timestamp}.json"
+            filepath = ASR_SCORING_RESULTS_DIR / filename
+            
+            # 准备保存数据
+            score_data = {
+                "timestamp": timestamp,
+                "audio_path": audio_path,
+                "context": context,
+                "asr_text": asr_text,
+                "corrected_text": self.asr_scorer.apply_corrections(asr_text, score.corrections) if self.asr_scorer else asr_text,
+                "scores": {
+                    "logic_score": score.logic_score,
+                    "semantic_coherence": score.semantic_coherence,
+                    "context_consistency": score.context_consistency,
+                    "error_detection_score": score.error_detection_score,
+                    "overall_score": score.overall_score
+                },
+                "suggestions": score.suggestions,
+                "corrections": score.corrections,
+                "detailed_feedback": score.detailed_feedback,
+                "should_retry": score.should_retry
+            }
+            
+            # 保存到文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(score_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"[ASR评分] 评分结果已保存: {filepath}")
+            
+        except Exception as e:
+            print(f"[ASR评分] 保存评分结果失败: {str(e)}")
     
     def text_to_speech(self, text: str, output_path: Optional[str] = None,
                       language: str = "Chinese", voice: Optional[str] = None) -> str:
