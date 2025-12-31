@@ -20,7 +20,7 @@ from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
 from cleanup_temp import cleanup_temp_files
-from security import InputValidator, SecurityError, RegexValidator
+from common.security import InputValidator, SecurityError, RegexValidator
 
 # 翻译风格常量定义
 VALID_TRANSLATION_STYLES = ["humorous", "serious", "educational", "entertainment", "news", "auto"]

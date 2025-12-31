@@ -19,7 +19,7 @@ from config import (
     ENABLE_ASR_SCORING,
     ASR_ERROR_MAPPINGS
 )
-from security import LLMOutputValidator, OutputValidationError
+from common.security import LLMOutputValidator, OutputValidationError
 
 
 @dataclass

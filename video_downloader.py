@@ -5,12 +5,97 @@
 
 import os
 import re
+import json
+import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import yt_dlp
-from config import YT_DLP_OPTIONS, TEMP_DIR
+from config import YT_DLP_OPTIONS, TEMP_DIR, OUTPUT_DIR
 from bv_utils import normalize_bilibili_url, extract_bv_from_url
-from security import PathSecurityValidator, URLValidator, FileValidator, SecurityError
+from common.security import PathSecurityValidator, URLValidator, FileValidator, SecurityError
+
+
+class BilibiliDebugLogger:
+    """B站调试日志记录器，用于捕获yt-dlp原始响应"""
+    
+    def __init__(self, bv_id: Optional[str] = None):
+        self.bv_id = bv_id or "unknown"
+        self.log_dir = OUTPUT_DIR / "debug_logs"
+        self.log_dir.mkdir(exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = self.log_dir / f"{self.bv_id}_{timestamp}.log"
+        
+        # 设置logging
+        self.logger = logging.getLogger(f"bilibili_debug_{bv_id}")
+        self.logger.setLevel(logging.DEBUG)
+        
+        # 移除现有处理器
+        self.logger.handlers.clear()
+        
+        # 文件处理器
+        file_handler = logging.FileHandler(self.log_file, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+        
+        # 控制台处理器（仅显示WARNING及以上）
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.WARNING)
+        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+        console_handler.setFormatter(console_formatter)
+        self.logger.addHandler(console_handler)
+        
+        self.logger.info(f"B站调试日志初始化完成 - BV: {self.bv_id}")
+    
+    def debug(self, msg: str):
+        self.logger.debug(msg)
+    
+    def info(self, msg: str):
+        self.logger.info(msg)
+    
+    def warning(self, msg: str):
+        self.logger.warning(msg)
+    
+    def error(self, msg: str):
+        self.logger.error(msg)
+    
+    def save_raw_response(self, url: str, response_text: str, error: Exception = None):
+        """保存原始响应数据"""
+        raw_data = {
+            "timestamp": datetime.now().isoformat(),
+            "bv_id": self.bv_id,
+            "url": url,
+            "response_preview": response_text[:1000] if response_text else "空响应",
+            "response_length": len(response_text) if response_text else 0,
+            "error": str(error) if error else None,
+            "error_type": error.__class__.__name__ if error else None
+        }
+        
+        raw_file = self.log_dir / f"{self.bv_id}_raw_response.json"
+        try:
+            with open(raw_file, 'w', encoding='utf-8') as f:
+                json.dump(raw_data, f, ensure_ascii=False, indent=2)
+            self.logger.info(f"原始响应已保存到: {raw_file}")
+        except Exception as e:
+            self.logger.error(f"保存原始响应失败: {e}")
+    
+    def log_yt_dlp_debug(self, msg: Dict[str, Any]):
+        """记录yt-dlp调试信息"""
+        if isinstance(msg, dict) and msg.get('url') and msg.get('downloader'):
+            self.logger.debug(f"yt-dlp下载器: {msg.get('downloader')} - URL: {msg.get('url')}")
+        
+        # 如果消息包含响应信息，尝试提取
+        if isinstance(msg, dict) and 'response' in msg:
+            response = msg['response']
+            if isinstance(response, dict) and 'text' in response:
+                self.save_raw_response(
+                    msg.get('url', 'unknown'),
+                    response['text'][:5000] if response['text'] else "空响应",
+                    None
+                )
 
 
 class VideoDownloader:
@@ -133,8 +218,26 @@ class VideoDownloader:
         
         print(f"开始下载B站视频: {url}")
         
-        # 配置下载选项
+        # 初始化调试日志记录器
+        debug_logger = BilibiliDebugLogger(bv_id)
+        debug_logger.info(f"开始下载B站视频: {url}")
+        debug_logger.info(f"BV号: {bv_id or '未知'}")
+        
+        # 配置下载选项（基于YT_DLP_OPTIONS并增强调试选项）
         ydl_opts = YT_DLP_OPTIONS.copy()
+        
+        # 增强调试选项
+        ydl_opts.update({
+            'verbose': True,  # 启用详细输出
+            'dump_intermediate_pages': True,  # 转储中间页面
+            'write_pages': True,  # 写入页面到文件
+            'load_pages': True,  # 加载页面
+            'no_color': True,  # 禁用颜色输出
+            'progress_hooks': [],  # 进度钩子（可添加自定义钩子）
+            'logger': debug_logger,  # 使用自定义logger
+            'debug_printtraffic': True,  # 打印网络流量（详细调试）
+        })
+        
         if output_path:
             ydl_opts['outtmpl'] = str(output_path)
         elif bv_id:
@@ -142,9 +245,13 @@ class VideoDownloader:
             ydl_opts['outtmpl'] = str(TEMP_DIR / f"{bv_id}.%(ext)s")
         
         try:
+            debug_logger.info("创建yt-dlp下载器实例")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                debug_logger.info(f"开始提取视频信息: {url}")
+                
                 # 获取视频信息
                 info = ydl.extract_info(url, download=True)
+                debug_logger.info(f"视频信息提取成功，标题: {info.get('title', '未知')}")
                 
                 # 获取实际下载的文件路径
                 if 'requested_downloads' in info and info['requested_downloads']:
@@ -158,10 +265,57 @@ class VideoDownloader:
                         title = info.get('title', 'video')
                         downloaded_file = str(TEMP_DIR / f"{title}.{ext}")
                 
+                debug_logger.info(f"视频下载完成: {downloaded_file}")
                 print(f"视频下载完成: {downloaded_file}")
                 return downloaded_file, bv_id
                 
+        except json.JSONDecodeError as json_err:
+            # JSON解析错误 - 捕获原始响应
+            debug_logger.error(f"JSON解析错误: {json_err}")
+            debug_logger.error(f"原始错误: {str(json_err)}")
+            
+            # 尝试从异常中提取更多信息
+            import traceback
+            error_trace = traceback.format_exc()
+            debug_logger.error(f"错误追踪:\n{error_trace}")
+            
+            # 尝试手动获取原始响应
+            try:
+                import urllib.request
+                import urllib.error
+                debug_logger.info("尝试手动获取页面内容...")
+                req = urllib.request.Request(
+                    url,
+                    headers=ydl_opts.get('http_headers', {})
+                )
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    raw_html = response.read().decode('utf-8', errors='ignore')
+                    debug_logger.save_raw_response(url, raw_html, json_err)
+                    debug_logger.error(f"手动获取页面成功，长度: {len(raw_html)}")
+                    debug_logger.error(f"页面预览: {raw_html[:500]}")
+            except Exception as manual_err:
+                debug_logger.error(f"手动获取页面失败: {manual_err}")
+            
+            raise ValueError(f"下载B站视频失败: JSON解析错误 - {str(json_err)}")
+                
         except Exception as e:
+            debug_logger.error(f"下载过程发生异常: {e}")
+            import traceback
+            error_trace = traceback.format_exc()
+            debug_logger.error(f"完整错误追踪:\n{error_trace}")
+            
+            # 检查是否是网络错误
+            if "Failed to parse JSON" in str(e):
+                debug_logger.error("检测到'Failed to parse JSON'错误，可能是B站API响应格式问题")
+                debug_logger.error("建议检查: 1. Cookie设置 2. 请求头 3. 网络代理")
+            
+            # 保存原始响应数据以便调试
+            try:
+                debug_logger.save_raw_response(url, f"异常信息: {str(e)}", e)
+                debug_logger.error(f"已保存异常信息到原始响应文件")
+            except Exception as save_err:
+                debug_logger.error(f"保存原始响应失败: {save_err}")
+            
             raise ValueError(f"下载B站视频失败: {str(e)}")
     
     @staticmethod

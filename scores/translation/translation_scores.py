@@ -17,7 +17,7 @@ from config import (
     MAX_RETRIES
 )
 from translation_modes import VideoStyle, get_translation_mode
-from security import LLMOutputValidator, OutputValidationError
+from common.security import LLMOutputValidator, OutputValidationError
 
 
 @dataclass

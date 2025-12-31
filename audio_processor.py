@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 from moviepy import VideoFileClip, AudioFileClip
 from config import TEMP_DIR, OUTPUT_DIR, AUDIO_FORMAT, VIDEO_CODEC, AUDIO_CODEC
-from security import FileValidator, PathSecurityValidator, SecurityError, ResourceValidator
+from common.security import FileValidator, PathSecurityValidator, SecurityError, ResourceValidator
 
 
 class AudioProcessor:
@@ -73,7 +73,7 @@ class AudioProcessor:
             video.audio.write_audiofile(
                 output_audio_path,
                 codec='libmp3lame' if AUDIO_FORMAT == 'mp3' else None,
-                #verbose=False,
+
                 logger=None
             )
             
@@ -116,6 +116,9 @@ class AudioProcessor:
             video = VideoFileClip(video_path)
             new_audio = AudioFileClip(new_audio_path)
             
+            # 初始化临时音频路径变量
+            temp_audio_path = None
+            
             # 检查音频长度,如果音频比视频短,需要处理
             if new_audio.duration < video.duration:
                 print(f"警告: 音频时长({new_audio.duration:.2f}s) 短于视频时长({video.duration:.2f}s)")
@@ -125,13 +128,15 @@ class AudioProcessor:
                 # 使用pydub裁剪音频
                 from pydub import AudioSegment
                 import tempfile
+                # import os
                 
                 # 读取音频文件
                 audio_segment = AudioSegment.from_wav(new_audio_path)
                 # 裁剪到视频长度(毫秒)
                 trimmed_audio = audio_segment[:int(video.duration * 1000)]
                 # 保存为临时文件
-                temp_audio_path = tempfile.mktemp(suffix=".wav")
+                fd, temp_audio_path = tempfile.mkstemp(suffix=".wav")
+                os.close(fd)  # 关闭文件描述符，pydub会重新打开文件
                 trimmed_audio.export(temp_audio_path, format="wav")
                 
                 # 重新加载裁剪后的音频
@@ -180,6 +185,19 @@ class AudioProcessor:
             
         except Exception as e:
             raise Exception(f"音频替换失败: {str(e)}")
+            
+        finally:
+            # 清理临时音频文件
+            if temp_audio_path is not None:
+                # 处理可能的元组格式（fd, path）
+                if isinstance(temp_audio_path, tuple):
+                    # 提取路径部分
+                    _, audio_path = temp_audio_path
+                else:
+                    audio_path = temp_audio_path
+                
+                if Path(audio_path).exists():
+                    Path(audio_path).unlink()
     
     @staticmethod
     def get_audio_duration(audio_path: str) -> float:

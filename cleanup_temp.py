@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from security import PathSecurityValidator
+from common.security import PathSecurityValidator
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent

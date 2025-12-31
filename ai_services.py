@@ -24,11 +24,11 @@ from config import (
     ASR_SCORE_THRESHOLD, ASR_MAX_RETRIES, ENABLE_ASR_SCORING,
     ASR_SCORING_RESULTS_DIR
 )
-from security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
+from common.security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
 from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
-from translation_dictionary import apply_translation_dictionary
-from translation_scores import TranslationScorer, TranslationScore
-from asr_scorer import AsrScorer, AsrScore
+from common.dictionary.translation_dictionary import apply_translation_dictionary
+from scores.translation.translation_scores import TranslationScorer, TranslationScore
+from scores.ASR.asr_scorer import AsrScorer, AsrScore
 
 
 
@@ -100,7 +100,139 @@ class AIServices:
         else:
             self.asr_scorer = None
             print(f"[初始化] ASR质量评分器已禁用")
+
+    @staticmethod
+    def _download_file(url: str, output_path: str) -> None:
+        """
+        从URL下载文件
+        
+        Args:
+            url: 文件URL
+            output_path: 输出路径
+        """
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
     
+    @staticmethod
+    def _upload_to_oss(file_path: str,  expiration=3600) -> str:
+        """
+        上传文件到阿里云OSS
+        
+        Args:
+            file_path: 本地文件路径
+            expiration: 签名URL过期时间（秒），默认3600秒（1小时）
+            
+        Returns:
+            OSS签名URL（私有Bucket使用签名URL）
+            
+        Raises:
+            ValueError: 文件路径非法或超出大小限制
+            SecurityError: 路径遍历攻击检测
+        """
+        import oss2
+
+        
+        # 安全检查1: 验证文件存在且可读
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            raise ValueError(f"文件不存在: {file_path}")
+        if not file_path_obj.is_file():
+            raise ValueError(f"不是有效文件: {file_path}")
+        
+        # 安全检查2: 验证文件大小（限制100MB）
+        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+        file_size = file_path_obj.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"文件过大: {file_size / 1024 / 1024:.2f}MB (限制: {MAX_FILE_SIZE / 1024 / 1024}MB)")
+        if file_size == 0:
+            raise ValueError("文件为空")
+        
+        # 安全检查3: 防止路径遍历攻击
+        try:
+            resolved_path = file_path_obj.resolve()
+            project_root_resolved = Path(PROJECT_ROOT).resolve()
+            # 确保文件在项目目录内
+            resolved_path.relative_to(project_root_resolved)
+        except (ValueError, RuntimeError) as e:
+            raise SecurityError(f"检测到路径遍历攻击: {file_path}") from e
+        
+        # 验证环境变量是否设置
+        required_vars = {
+            "ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
+            "ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
+            "OSS_BUCKET_NAME": OSS_BUCKET_NAME
+        }
+        missing_vars = [name for name, value in required_vars.items() if not value]
+        
+        if missing_vars:
+            raise ValueError(
+                f"Missing required OSS environment variables: {', '.join(missing_vars)}"
+            )
+        
+        # 初始化OSS客户端
+        try:
+            auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+            # 注意：endpoint不要加https://前缀
+            bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+            print(f"[OSS] 连接配置 - Endpoint: {OSS_ENDPOINT}, Bucket: {OSS_BUCKET_NAME}")
+        except Exception as e:
+            raise Exception(f"OSS客户端初始化失败: {str(e)}") from e
+        
+        # 生成规范的对象名（遵循项目规范：video_translate/audio/{timestamp}_{filename}）
+        timestamp = int(time.time() * 1000)  # 使用毫秒时间戳
+        original_filename = file_path_obj.name
+        # 移除中文字符，只保留ASCII字符和数字
+        safe_filename = ''.join(c if c.isalnum() or c in '._-' else '_' for c in original_filename)
+        object_name = f"video_translate/audio/{timestamp}_{safe_filename}"
+        
+        # 安全检查：确保对象名不包含..
+        if ".." in object_name:
+            raise SecurityError(f"对象名包含非法字符: {object_name}")
+        
+        print(f"[OSS] 上传文件: {file_path_obj.name} -> {object_name}")
+        
+        # 上传文件（为Fun-ASR设置公共读权限）
+        try:
+            # 设置文件ACL为公共读（Fun-ASR要求）
+            headers = {
+                'x-oss-object-acl': 'public-read'
+            }
+            result = bucket.put_object_from_file(
+                object_name, 
+                str(resolved_path),
+                headers=headers
+            )
+            print(f"[OSS] 上传成功 - RequestID: {result.request_id}")
+            print(f"[OSS] 文件权限: 公共读（Fun-ASR要求）")
+        except oss2.exceptions.OssError as e:
+            # 详细的OSS错误信息
+            raise Exception(
+                f"OSS上传失败: {{\n"
+                f"  状态码: {e.status}\n"
+                f"  错误码: {e.code}\n"
+                f"  消息: {e.message}\n"
+                f"  RequestID: {e.request_id}\n"
+                f"}}" 
+            )
+        except Exception as e:
+            raise Exception(f"OSS上传失败: {str(e)}") from e
+        
+        # 生成公开URL（Fun-ASR要求文件公共可读）
+        # 注意：不使用签名URL，因为Fun-ASR需要直接访问
+        public_url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_name}"
+        
+        print(f"[OSS] 文件上传成功 (大小: {file_size / 1024:.2f}KB)")
+        print(f"[OSS] 公开URL: {public_url}")
+        print(f"[OSS] 原始路径: {object_name}")  # 记录原始路径用于调试
+        
+        return public_url
+
+    
+    #TODO 重构，改为分布式一致判断文本内容
     def speech_to_text(self, audio_path: str) -> str:
         """
         语音识别 (ASR) - 将音频转换为文本
@@ -121,7 +253,7 @@ class AIServices:
             raise ValueError("音频路径参数无效")
         
         # 2. 音频文件安全验证
-        from security import FileValidator
+        from common.security import FileValidator
         audio_info = FileValidator.validate_audio_file(audio_path)
         
         print(f"\n[ASR] 开始语音识别: {audio_path}")
@@ -157,7 +289,7 @@ class AIServices:
                 print(f"[ASR] 任务ID: {task_id}, 等待识别完成...")
                 
                 # 轮询任务状态
-                import time
+
                 max_retries = 60  # 最多等待60次
                 for i in range(max_retries):
                     result_response = Transcription.wait(task=task_id)
@@ -173,7 +305,7 @@ class AIServices:
                         print(f"[ASR] 识别完成, 下载结果...")
                         
                         # 下载并解析结果
-                        import requests
+
                         import json
                         resp = requests.get(transcription_url)
                         resp.raise_for_status()
@@ -196,7 +328,7 @@ class AIServices:
                             print(f"[ASR] 安全验证通过")
                         except OutputValidationError as e:
                             print(f"[ASR] 安全验证失败: {e}")
-                            raise Exception(f"ASR输出安全验证失败: {e}")
+                            raise Exception(f"ASR输出安全验证失败: {e}") from e
                         
                         # ASR质量评分和校正
                         if self.asr_scorer:
@@ -335,7 +467,7 @@ class AIServices:
                             retry_delay *= 2  # 指数退避
                             continue
                         else:
-                            raise Exception(f"翻译请求超时，已重试{max_retries}次: {str(e)}")
+                            raise Exception(f"翻译请求超时，已重试{max_retries}次: {str(e)}") from e
                     else:
                         raise  # 非超时错误直接抛出
             
@@ -350,7 +482,7 @@ class AIServices:
                 print("[翻译] 安全验证通过")
             except OutputValidationError as e:
                 print("[翻译] 安全验证失败: {e}")
-                raise SecurityError("翻译输出安全验证失败: {e}")
+                raise SecurityError("翻译输出安全验证失败: {e}") from e
             
             print(f"[翻译] 翻译完成,译文长度: {len(translated_text)} 字符")
             print(f"[翻译] 译文: {translated_text[:100]}..." if len(translated_text) > 100 else f"[翻译] 译文: {translated_text}")
@@ -372,7 +504,7 @@ class AIServices:
             return corrected_text
             
         except Exception as e:
-            raise Exception(f"文本翻译失败: {str(e)}")
+            raise Exception(f"文本翻译失败: {str(e)}") from e
     
     def evaluate_translation(
         self, 
@@ -576,7 +708,7 @@ class AIServices:
                 print("[参数调整] 翻译完成")
             except OutputValidationError as e:
                 print(f"[参数调整] 安全验证失败: {e}")
-                raise SecurityError(f"翻译输出安全验证失败: {e}")
+                raise SecurityError(f"翻译输出安全验证失败: {e}") from e
             
             # 应用翻译词典修正
             corrected_text = apply_translation_dictionary(
@@ -589,7 +721,7 @@ class AIServices:
             
         except Exception as e:
             print(f"[参数调整] 翻译失败: {str(e)}")
-            raise Exception(f"参数调整翻译失败: {str(e)}")
+            raise Exception(f"参数调整翻译失败: {str(e)}") from e
     
     def _save_score_result(
         self, 
@@ -613,7 +745,7 @@ class AIServices:
         """
         try:
             import json
-            import time
+
             
             # 生成文件名
             timestamp = int(time.time())
@@ -669,7 +801,7 @@ class AIServices:
         """
         try:
             import json
-            import time
+
             
             # 生成文件名
             timestamp = int(time.time())
@@ -844,157 +976,5 @@ class AIServices:
         
         return output_path
     
-    @staticmethod
-    def _download_file(url: str, output_path: str) -> None:
-        """
-        从URL下载文件
-        
-        Args:
-            url: 文件URL
-            output_path: 输出路径
-        """
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        
-        with open(output_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-    
-    @staticmethod
-    def _upload_to_oss(file_path: str,  expiration=3600) -> str:
-        """
-        上传文件到阿里云OSS
-        
-        Args:
-            file_path: 本地文件路径
-            expiration: 签名URL过期时间（秒），默认3600秒（1小时）
-            
-        Returns:
-            OSS签名URL（私有Bucket使用签名URL）
-            
-        Raises:
-            ValueError: 文件路径非法或超出大小限制
-            SecurityError: 路径遍历攻击检测
-        """
-        import oss2
-        import time
-        
-        # 安全检查1: 验证文件存在且可读
-        file_path_obj = Path(file_path)
-        if not file_path_obj.exists():
-            raise ValueError(f"文件不存在: {file_path}")
-        if not file_path_obj.is_file():
-            raise ValueError(f"不是有效文件: {file_path}")
-        
-        # 安全检查2: 验证文件大小（限制100MB）
-        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
-        file_size = file_path_obj.stat().st_size
-        if file_size > MAX_FILE_SIZE:
-            raise ValueError(f"文件过大: {file_size / 1024 / 1024:.2f}MB (限制: {MAX_FILE_SIZE / 1024 / 1024}MB)")
-        if file_size == 0:
-            raise ValueError("文件为空")
-        
-        # 安全检查3: 防止路径遍历攻击
-        try:
-            resolved_path = file_path_obj.resolve()
-            project_root_resolved = Path(PROJECT_ROOT).resolve()
-            # 确保文件在项目目录内
-            resolved_path.relative_to(project_root_resolved)
-        except (ValueError, RuntimeError) as e:
-            raise SecurityError(f"检测到路径遍历攻击: {file_path}")
-        
-        # 验证环境变量是否设置
-        required_vars = {
-            "ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
-            "ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
-            "OSS_BUCKET_NAME": OSS_BUCKET_NAME
-        }
-        missing_vars = [name for name, value in required_vars.items() if not value]
-        
-        if missing_vars:
-            raise ValueError(
-                f"Missing required OSS environment variables: {', '.join(missing_vars)}"
-            )
-        
-        # 初始化OSS客户端
-        try:
-            auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
-            # 注意：endpoint不要加https://前缀
-            bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
-            print(f"[OSS] 连接配置 - Endpoint: {OSS_ENDPOINT}, Bucket: {OSS_BUCKET_NAME}")
-        except Exception as e:
-            raise Exception(f"OSS客户端初始化失败: {str(e)}")
-        
-        # 生成规范的对象名（遵循项目规范：video_translate/audio/{timestamp}_{filename}）
-        timestamp = int(time.time() * 1000)  # 使用毫秒时间戳
-        original_filename = file_path_obj.name
-        # 移除中文字符，只保留ASCII字符和数字
-        safe_filename = ''.join(c if c.isalnum() or c in '._-' else '_' for c in original_filename)
-        object_name = f"video_translate/audio/{timestamp}_{safe_filename}"
-        
-        # 安全检查：确保对象名不包含..
-        if ".." in object_name:
-            raise SecurityError(f"对象名包含非法字符: {object_name}")
-        
-        print(f"[OSS] 上传文件: {file_path_obj.name} -> {object_name}")
-        
-        # 上传文件（为Fun-ASR设置公共读权限）
-        try:
-            # 设置文件ACL为公共读（Fun-ASR要求）
-            headers = {
-                'x-oss-object-acl': 'public-read'
-            }
-            result = bucket.put_object_from_file(
-                object_name, 
-                str(resolved_path),
-                headers=headers
-            )
-            print(f"[OSS] 上传成功 - RequestID: {result.request_id}")
-            print(f"[OSS] 文件权限: 公共读（Fun-ASR要求）")
-        except oss2.exceptions.OssError as e:
-            # 详细的OSS错误信息
-            raise Exception(
-                f"OSS上传失败: {{\n"
-                f"  状态码: {e.status}\n"
-                f"  错误码: {e.code}\n"
-                f"  消息: {e.message}\n"
-                f"  RequestID: {e.request_id}\n"
-                f"}}"
-            )
-        except Exception as e:
-            raise Exception(f"OSS上传失败: {str(e)}")
-        
-        # 生成公开URL（Fun-ASR要求文件公共可读）
-        # 注意：不使用签名URL，因为Fun-ASR需要直接访问
-        public_url = f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{object_name}"
-        
-        print(f"[OSS] 文件上传成功 (大小: {file_size / 1024:.2f}KB)")
-        print(f"[OSS] 公开URL: {public_url}")
-        print(f"[OSS] 原始路径: {object_name}")  # 记录原始路径用于调试
-        
-        return public_url
 
-    # @staticmethod
-    # def _get_signed_url(object_name, expiration=3600):
-    # # 生成3600秒有效期的临时访问链接
-    # url = bucket.sign_url(
-    #     method='GET',
-    #     key=object_name,
-    #     expires=expiration
-    # )
-    # return url
-    # @staticmethod
-    # def check_oss_env_vars():
-    # #检查必要的 OSS 环境变量是否已设置
-    #     required_vars = {
-    #     "OSS_ACCESS_KEY_ID": os.getenv("OSS_ACCESS_KEY_ID"),
-    #     "OSS_ACCESS_KEY_SECRET": os.getenv("OSS_ACCESS_KEY_SECRET"),
-    #     "OSS_BUCKET_NAME": os.getenv("OSS_BUCKET_NAME")
-    #     }
-
-    #     missing_vars = [name for name, value in required_vars.items() if not value]
-    
-    #     if missing_vars:
-    #         raise ValueError(
-    #             f"Missing required OSS environment variables: {', '.join(missing_vars)}"
-    #     )
+   

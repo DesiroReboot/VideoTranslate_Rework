@@ -83,6 +83,23 @@ YT_DLP_OPTIONS = {
     # 其他重要选项
     'nocheckcertificate': True,  # 忽略SSL证书验证问题
     'geo_bypass': True,  # 绕过地理限制
+    # 增强选项以解决JSON解析错误
+    'retries': 10,  # 增加重试次数
+    'fragment_retries': 10,
+    'skip_unavailable_fragments': True,
+    'extract_flat': False,
+    'ignoreerrors': False,
+    'no_color': True,
+    'socket_timeout': 30,
+    'extractor_args': {
+        'bilibili': {
+            'skip_wbi': True,  # 跳过WBI签名，有时会导致问题
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://www.bilibili.com/',
+            }
+        }
+    }
 }
 
 # B站Cookie配置（可选 - 用于下载需要登录的视频）
@@ -90,7 +107,7 @@ YT_DLP_OPTIONS = {
 # 1. 在浏览器登录B站
 # 2. 导出Cookie到文件
 # 3. 取消下面的注释并设置路径
-# BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
+BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
 
 # ==================== 音视频参数 ====================
 # 音频采样率

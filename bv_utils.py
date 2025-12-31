@@ -6,7 +6,7 @@ BV号工具模块
 import re
 import requests
 from typing import Optional
-from security import RegexValidator, URLValidator, ResourceValidator
+from common.security import RegexValidator, URLValidator, ResourceValidator
 
 
 def extract_bv_from_url(url: str) -> Optional[str]:
