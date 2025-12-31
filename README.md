@@ -9,6 +9,7 @@
 - 📁 本地视频文件支持 (.mp4, .avi, .mov, .mkv)
 - 🎙️ 语音识别 (ASR) - 支持50+语言
 - 🌐 文本翻译 - 支持92种语言互译
+- 🎨 多风格翻译模式 - 支持6种翻译风格适应不同视频类型
 - 🗣️ 语音合成 (TTS) - 49种音色
 - 🎬 自动替换配音并输出新视频
 
@@ -65,15 +66,26 @@ python -c "from config import validate_config; validate_config()"
 ### 基本用法
 
 ```bash
-# 翻译B站视频为英文
+# 翻译B站视频为英文 (自动风格)
 python main.py "https://www.bilibili.com/video/BVxxxxxxxxx" English
 
-# 翻译本地视频为日文
+# 翻译本地视频为日文 (自动风格)
 python main.py "video.mp4" Japanese
 
 # 指定源语言
 python main.py "video.mp4" English Chinese
+
+# 翻译B站视频为英文 (幽默风格)
+python main.py "https://www.bilibili.com/video/BVxxxxxxxxx" English humorous
+
+# 翻译教育视频为英文 (教育风格)
+python main.py "education_video.mp4" English educational
+
+# 翻译新闻视频为英文 (新闻风格)
+python main.py "news_video.mp4" English news
 ```
+
+**翻译风格参数**: 第三个参数可选，指定翻译风格 (humorous, serious, educational, entertainment, news, auto)。默认为 auto (自动检测)。
 
 ### 支持的语言
 
@@ -90,6 +102,26 @@ python main.py "video.mp4" English Chinese
 - `Portuguese` - 葡萄牙语
 
 更多语言请参考阿里云文档: https://help.aliyun.com/zh/model-studio/machine-translation
+
+### 翻译模式
+
+系统提供6种翻译风格，适应不同类型视频内容：
+
+| 风格 | 英文标识 | 适用场景 | 特点 |
+|------|----------|----------|------|
+| 幽默风格 | `humorous` | 搞笑、娱乐类视频 | 保留幽默感和轻松氛围，使用口语化表达 |
+| 正经风格 | `serious` | 教育、新闻、纪录片等严肃内容 | 注重准确性和专业性，使用正式表达 |
+| 教育风格 | `educational` | 教学、科普类视频 | 平衡准确性和易懂性，适合学习者 |
+| 娱乐风格 | `entertainment` | 综艺、访谈等娱乐内容 | 保持轻松活泼的氛围，富有表现力 |
+| 新闻风格 | `news` | 新闻报道、时事评论 | 注重客观性和时效性，使用标准新闻规范 |
+| 自动检测 | `auto` | 任意视频内容（默认） | 自动识别内容类型并选择最适合的风格 |
+
+**参数使用**: 在目标语言后添加翻译风格参数，例如 `python main.py "video.mp4" English serious`
+
+**高级特性**:
+- **智能风格识别**: auto模式自动分析视频内容并选择最佳翻译策略
+- **参数调优**: 不同风格使用不同的温度、top_p等模型参数优化翻译质量
+- **文化适配**: 根据目标语言文化背景调整表达方式
 
 ### 输出文件
 

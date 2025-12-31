@@ -19,7 +19,7 @@ class TranslationDictionary:
     
     def __init__(self):
         """初始化翻译词典"""
-        from dictionary_config import config
+        from .dictionary_config import config
         
         # 精确匹配词典 - 中文到英文
         self.exact_dict_zh_to_en = config.exact_dict_zh_to_en.copy()
