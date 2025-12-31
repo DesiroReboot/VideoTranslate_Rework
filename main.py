@@ -103,12 +103,23 @@ class VideoTranslator:
             
             # 步骤4: 文本翻译
             print(f"\n[步骤 4/6] 翻译文本 (目标语言: {target_language})...")
-            translated_text = self.ai_services.translate_text(
+            
+            # 使用带质量评价和重试的翻译方法
+            translated_text, translation_score = self.ai_services.translate_with_retry(
                 original_text, 
                 target_language, 
                 source_language
             )
+            
             print(f"✓ 翻译完成,共 {len(translated_text)} 字符")
+            
+            # 如果有评分结果，显示评分信息
+            if translation_score:
+                print(f"✓ 翻译质量评分: {translation_score.overall_score:.1f}/100")
+                if translation_score.suggestions:
+                    print("✓ 改进建议:")
+                    for i, suggestion in enumerate(translation_score.suggestions[:3], 1):  # 只显示前3条建议
+                        print(f"  {i}. {suggestion}")
             
             # 保存译文
             if bv_id:
@@ -118,6 +129,45 @@ class VideoTranslator:
                 translated_text_file = OUTPUT_DIR / f"{video_name}_translated_{target_language}.txt"
             translated_text_file.write_text(translated_text, encoding='utf-8')
             print(f"  译文已保存: {translated_text_file}")
+            
+            # 如果有评分结果，保存评分报告
+            if translation_score:
+                from config import SCORING_RESULTS_DIR
+                import json
+                
+                # 生成评分报告文件名
+                if bv_id:
+                    score_report_file = SCORING_RESULTS_DIR / f"{bv_id}_{target_language}_score_report.json"
+                else:
+                    video_name = Path(video_path).stem
+                    score_report_file = SCORING_RESULTS_DIR / f"{video_name}_{target_language}_score_report.json"
+                
+                # 准备评分报告数据
+                score_report = {
+                    "video_info": {
+                        "bv_id": bv_id,
+                        "video_path": video_path,
+                        "source_language": source_language,
+                        "target_language": target_language
+                    },
+                    "translation_score": {
+                        "overall_score": translation_score.overall_score,
+                        "fluency": translation_score.fluency,
+                        "completeness": translation_score.completeness,
+                        "consistency": translation_score.consistency,
+                        "accuracy": translation_score.accuracy,
+                        "style_adaptation": translation_score.style_adaptation,
+                        "cultural_adaptation": translation_score.cultural_adaptation,
+                        "suggestions": translation_score.suggestions,
+                        "detailed_feedback": translation_score.detailed_feedback
+                    },
+                    "timestamp": int(time.time())
+                }
+                
+                # 保存评分报告
+                with open(score_report_file, 'w', encoding='utf-8') as f:
+                    json.dump(score_report, f, ensure_ascii=False, indent=2)
+                print(f"  评分报告已保存: {score_report_file}")
             
             # 步骤5: 语音合成
             print("\n[步骤 5/6] 语音合成(TTS)...")

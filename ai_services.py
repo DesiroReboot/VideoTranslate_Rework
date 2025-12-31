@@ -7,7 +7,7 @@ import os
 import time
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from urllib.parse import unquote
 import dashscope
 from openai import OpenAI
@@ -24,7 +24,18 @@ from config import (
 from security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
 from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
 from translation_dictionary import apply_translation_dictionary
-#from dashscope.audio.asr import Recognition
+from translation_scores import TranslationScorer, TranslationScore
+from config import (
+    DASHSCOPE_API_KEY, 
+    DASHSCOPE_BASE_URL,
+    # test_api_key,
+    ASR_MODEL, MT_MODEL, TTS_MODEL,
+    TTS_VOICE_MAP, DEFAULT_VOICE,
+    TEMP_DIR, load_translation_prompt,
+    OSS_ENDPOINT,PROJECT_ROOT,
+    OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET_NAME,
+    ENABLE_TRANSLATION_SCORING, SCORING_RESULTS_DIR
+)
 
 
 # 安全异常类
@@ -79,6 +90,14 @@ class AIServices:
         self.mode_manager = TranslationModeManager()
         self.translation_style = get_translation_mode(translation_style)
         self.mode_manager.set_mode(self.translation_style)
+        
+        # 初始化翻译质量评分器
+        if ENABLE_TRANSLATION_SCORING:
+            self.scorer = TranslationScorer()
+            print(f"[初始化] 翻译质量评分器已启用")
+        else:
+            self.scorer = None
+            print(f"[初始化] 翻译质量评分器已禁用")
     
     def speech_to_text(self, audio_path: str) -> str:
         """
@@ -329,6 +348,283 @@ class AIServices:
             
         except Exception as e:
             raise Exception(f"文本翻译失败: {str(e)}")
+    
+    def evaluate_translation(
+        self, 
+        source_text: str, 
+        translated_text: str, 
+        source_language: str, 
+        target_language: str,
+        translation_style: str = "auto"
+    ) -> Optional[TranslationScore]:
+        """
+        评价翻译质量
+        
+        Args:
+            source_text: 原文
+            translated_text: 译文
+            source_language: 源语言
+            target_language: 目标语言
+            translation_style: 翻译风格
+            
+        Returns:
+            TranslationScore: 评分结果，如果评分器未启用则返回None
+        """
+        if not self.scorer:
+            print("[评分] 翻译质量评分器未启用，跳过评分")
+            return None
+        
+        try:
+            score = self.scorer.score_translation(
+                source_text, translated_text, source_language, 
+                target_language, translation_style
+            )
+            
+            # 保存评分结果
+            self._save_score_result(
+                source_text, translated_text, score, 
+                source_language, target_language, translation_style
+            )
+            
+            return score
+            
+        except Exception as e:
+            print(f"[评分] 评价翻译质量失败: {str(e)}")
+            return None
+    
+    def translate_with_retry(
+        self, 
+        text: str, 
+        target_language: str, 
+        source_language: str = "auto",
+        max_retries: Optional[int] = None
+    ) -> Tuple[str, Optional[TranslationScore]]:
+        """
+        带质量评价和重试的翻译方法
+        
+        Args:
+            text: 待翻译文本
+            target_language: 目标语言
+            source_language: 源语言(默认自动检测)
+            max_retries: 最大重试次数，如果为None则使用配置中的值
+            
+        Returns:
+            Tuple[str, Optional[TranslationScore]]: 翻译结果和评分
+        """
+        if not self.scorer:
+            # 如果评分器未启用，直接使用普通翻译
+            translated_text = self.translate_text(text, target_language, source_language)
+            return translated_text, None
+        
+        # 设置最大重试次数
+        if max_retries is None:
+            from config import MAX_RETRIES
+            max_retries = MAX_RETRIES
+        
+        best_translation = ""
+        best_score = None
+        retry_count = 0
+        
+        while retry_count <= max_retries:
+            print(f"\n[翻译重试] 第 {retry_count + 1} 次尝试...")
+            
+            # 执行翻译
+            if retry_count == 0:
+                # 第一次尝试使用正常参数
+                translated_text = self.translate_text(text, target_language, source_language)
+            else:
+                # 后续尝试调整参数
+                translated_text = self._translate_with_adjusted_params(
+                    text, target_language, source_language, retry_count
+                )
+            
+            # 评价翻译质量
+            score = self.evaluate_translation(
+                text, translated_text, source_language, 
+                target_language, self.translation_style.value
+            )
+            
+            if score is None:
+                # 评分失败，但翻译成功
+                print(f"[翻译重试] 评分失败，使用翻译结果")
+                return translated_text, None
+            
+            # 检查是否需要重试
+            if not self.scorer.should_retry(score, retry_count):
+                print(f"[翻译重试] 翻译质量达标，无需重试")
+                return translated_text, score
+            
+            # 保存最佳翻译
+            if best_score is None or score.overall_score > best_score.overall_score:
+                best_translation = translated_text
+                best_score = score
+            
+            # 提供改进建议
+            suggestions = self.scorer.provide_improvement_suggestions(score)
+            if suggestions:
+                print(f"[翻译重试] 改进建议:")
+                for i, suggestion in enumerate(suggestions, 1):
+                    print(f"  {i}. {suggestion}")
+            
+            retry_count += 1
+        
+        # 所有重试都完成，使用最佳结果
+        print(f"[翻译重试] 已达到最大重试次数，使用最佳结果")
+        if best_score:
+            return best_translation, best_score
+        else:
+            return translated_text, score
+    
+    def _translate_with_adjusted_params(
+        self, 
+        text: str, 
+        target_language: str, 
+        source_language: str, 
+        retry_count: int
+    ) -> str:
+        """
+        使用调整后的参数进行翻译
+        
+        Args:
+            text: 待翻译文本
+            target_language: 目标语言
+            source_language: 源语言
+            retry_count: 重试次数
+            
+        Returns:
+            翻译结果
+        """
+        print(f"[参数调整] 根据重试次数调整翻译参数...")
+        
+        # 获取当前翻译模式
+        current_mode = self.mode_manager.get_current_mode()
+        if not current_mode:
+            current_mode = self.mode_manager.get_mode(VideoStyle.AUTO)
+        
+        # 调整参数
+        base_params = current_mode.get_model_params()
+        
+        # 根据重试次数调整temperature
+        if retry_count == 1:
+            # 第一次重试，降低temperature，提高准确性
+            adjusted_params = base_params.copy()
+            adjusted_params["temperature"] = max(0.1, base_params.get("temperature", 0.5) - 0.2)
+            print(f"[参数调整] 降低temperature至 {adjusted_params['temperature']:.2f}")
+        elif retry_count == 2:
+            # 第二次重试，提高temperature，增加创造性
+            adjusted_params = base_params.copy()
+            adjusted_params["temperature"] = min(1.0, base_params.get("temperature", 0.5) + 0.2)
+            print(f"[参数调整] 提高temperature至 {adjusted_params['temperature']:.2f}")
+        else:
+            # 更多重试，使用中等temperature
+            adjusted_params = base_params.copy()
+            adjusted_params["temperature"] = 0.5
+            print(f"[参数调整] 设置temperature为 0.5")
+        
+        # 格式化系统提示词
+        system_prompt = self.mode_manager.format_prompt(
+            current_mode, source_language, target_language
+        )
+        
+        # 构建用户消息
+        user_message = f"请将以下{source_language}文本翻译成{target_language}：\n\n{text}"
+        
+        # 构建消息
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+        
+        try:
+            # 调用Qwen-max API
+            completion = self.openai_client.chat.completions.create(
+                model=MT_MODEL,
+                messages=messages,
+                **adjusted_params
+            )
+            
+            # 安全验证
+            try:
+                translated_text = LLMOutputValidator.sanitize_translation_output(
+                    completion.choices[0].message.content
+                )
+                print("[参数调整] 翻译完成")
+            except OutputValidationError as e:
+                print(f"[参数调整] 安全验证失败: {e}")
+                raise SecurityError(f"翻译输出安全验证失败: {e}")
+            
+            # 应用翻译词典修正
+            corrected_text = apply_translation_dictionary(
+                translated_text, 
+                source_language=source_language, 
+                target_language=target_language
+            )
+            
+            return corrected_text
+            
+        except Exception as e:
+            print(f"[参数调整] 翻译失败: {str(e)}")
+            raise Exception(f"参数调整翻译失败: {str(e)}")
+    
+    def _save_score_result(
+        self, 
+        source_text: str, 
+        translated_text: str, 
+        score: TranslationScore,
+        source_language: str, 
+        target_language: str, 
+        translation_style: str
+    ) -> None:
+        """
+        保存评分结果
+        
+        Args:
+            source_text: 原文
+            translated_text: 译文
+            score: 评分结果
+            source_language: 源语言
+            target_language: 目标语言
+            translation_style: 翻译风格
+        """
+        try:
+            import json
+            import time
+            
+            # 生成文件名
+            timestamp = int(time.time())
+            filename = f"translation_score_{timestamp}.json"
+            filepath = SCORING_RESULTS_DIR / filename
+            
+            # 准备保存数据
+            score_data = {
+                "timestamp": timestamp,
+                "source_language": source_language,
+                "target_language": target_language,
+                "translation_style": translation_style,
+                "source_text": source_text,
+                "translated_text": translated_text,
+                "scores": {
+                    "fluency": score.fluency,
+                    "completeness": score.completeness,
+                    "consistency": score.consistency,
+                    "accuracy": score.accuracy,
+                    "style_adaptation": score.style_adaptation,
+                    "cultural_adaptation": score.cultural_adaptation,
+                    "overall_score": score.overall_score
+                },
+                "suggestions": score.suggestions,
+                "detailed_feedback": score.detailed_feedback,
+                "should_retry": score.should_retry
+            }
+            
+            # 保存到文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(score_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"[评分] 评分结果已保存: {filepath}")
+            
+        except Exception as e:
+            print(f"[评分] 保存评分结果失败: {str(e)}")
     
     def text_to_speech(self, text: str, output_path: Optional[str] = None,
                       language: str = "Chinese", voice: Optional[str] = None) -> str:

@@ -107,6 +107,23 @@ AUDIO_CODEC = "aac"
 # 从Prompt_Video_Translate.txt读取系统提示词
 TRANSLATION_SYSTEM_PROMPT_FILE = PROJECT_ROOT / "Prompt_Video_Translate.txt"
 
+# ==================== 翻译质量评分配置 ====================
+# 评分使用的模型
+SCORING_MODEL = "qwen-max"
+
+# 评分阈值 - 低于此分数将触发重试
+SCORE_THRESHOLD = 70
+
+# 最大重试次数
+MAX_RETRIES = 2
+
+# 是否启用翻译质量评分
+ENABLE_TRANSLATION_SCORING = True
+
+# 评分结果保存目录
+SCORING_RESULTS_DIR = OUTPUT_DIR / "scoring_results"
+SCORING_RESULTS_DIR.mkdir(exist_ok=True)
+
 def load_translation_prompt(target_language: str) -> str:
     """
     加载翻译系统提示词并替换目标语言
