@@ -19,116 +19,36 @@ class TranslationDictionary:
     
     def __init__(self):
         """初始化翻译词典"""
-        # 精确匹配词典 - 中文到英文
-        self.exact_dict_zh_to_en: Dict[str, str] = {
-            # 警察相关
-            '阿SIR': 'police',
-            '阿sir': 'police',
-            '阿Sir': 'police',
-            '警察': 'police',
-            '警官': 'officer',
-            '警员': 'officer',
-            
-            # 常见误译词汇
-            '大佬': 'boss',
-            '大佬们': 'bosses',
-            '小弟': 'underling',
-            '马仔': 'henchman',
-            
-            # 网络用语
-            '666': 'awesome',
-            '牛逼': 'awesome',
-            '厉害': 'amazing',
-            '给力': 'great',
-            
-            # 称呼
-            '兄弟': 'brother',
-            '哥们': 'buddy',
-            '姐妹': 'sisters',
-            '闺蜜': 'bestie',
-            
-            # 职业相关
-            '医生': 'doctor',
-            '护士': 'nurse',
-            '老师': 'teacher',
-            '学生': 'student',
-        }
+        from dictionary_config import config
         
         # 精确匹配词典 - 中文到英文
-        self.exact_dict_zh_to_en: Dict[str, str] = {
-            # 警察相关
-            '阿SIR': 'police',
-            '阿sir': 'police',
-            '阿Sir': 'police',
-            '警察': 'police',
-            '警官': 'officer',
-            '警员': 'officer',
-            
-            # 常见误译词汇
-            '大佬': 'boss',
-            '大佬们': 'bosses',
-            '小弟': 'underling',
-            '马仔': 'henchman',
-            
-            # 网络用语
-            '666': 'awesome',
-            '牛逼': 'awesome',
-            '给力': 'great',
-            
-            # 称呼
-            '兄弟': 'brother',
-            '哥们': 'buddy',
-            '姐妹': 'sisters',
-            '闺蜜': 'bestie',
-            
-            # 职业相关
-            '医生': 'doctor',
-            '护士': 'nurse',
-            '老师': 'teacher',
-            '学生': 'student',
-        }
+        self.exact_dict_zh_to_en = config.exact_dict_zh_to_en.copy()
         
         # 精确匹配词典 - 英文到中文
-        self.exact_dict_en_to_zh: Dict[str, str] = {
-            'police': '警察',
-            'officer': '警官',
-            'boss': '老板',
-            'awesome': '厉害',
-            'amazing': '惊人',
-            'great': '很棒',
-            'brother': '兄弟',
-            'buddy': '哥们',
-            'doctor': '医生',
-            'nurse': '护士',
-            'teacher': '老师',
-            'student': '学生',
-        }
+        self.exact_dict_en_to_zh = config.exact_dict_en_to_zh.copy()
         
-        # 正则匹配词典 - 处理变体
-        self.regex_dict: List[Dict[str, str]] = [
-            # 处理阿SIR的各种变体
-            {
-                'pattern': r'阿[Ss][Ii][Rr]',
-                'replacement': 'police',
-                'description': '阿SIR的各种写法'
-            },
-            # 处理数字+6的组合（只在英文语境中）
-            {
-                'pattern': r'\b666\b',
-                'replacement': 'awesome',
-                'description': '单独的数字666'
-            },
-        ]
+        # 正则匹配词典
+        self.regex_dict = config.regex_dict.copy()
         
-        # 上下文相关词典 - 根据上下文判断
-        self.context_dict: List[Dict] = [
-            {
-                'keywords': ['阿SIR', '警察', '警官'],
-                'context_patterns': [r'抓', r'追', r'查', r'办案'],
-                'translation': 'police',
-                'description': '执法相关语境'
-            }
-        ]
+        # 上下文相关词典
+        self.context_dict = config.context_dict.copy()
+        
+        # 过滤词典
+        self.filter_dict = config.filter_dict.copy()
+        
+        # 不翻译列表
+        self.no_translate_list = config.no_translate_list.copy()
+    
+    def _apply_filter(self, text: str) -> str:
+        """应用过滤词典到文本
+        
+        过滤敏感或不合适的内容，替换为[过滤]标记
+        """
+        result = text
+        for source, target in self.filter_dict.items():
+            # 使用字符串替换过滤敏感词
+            result = result.replace(source, target)
+        return result
     
     def apply_dictionary(self, text: str, source_language: str = 'auto', target_language: str = 'auto') -> str:
         """应用词典到文本
@@ -143,6 +63,9 @@ class TranslationDictionary:
         """
         if not text:
             return text
+        
+        # 先应用过滤词典
+        text = self._apply_filter(text)
         
         # 判断翻译方向
         if source_language in ['zh', 'chinese', '中文'] or self._is_chinese_text(text):
@@ -232,7 +155,9 @@ class TranslationDictionary:
             'zh_to_en_entries': len(self.exact_dict_zh_to_en),
             'en_to_zh_entries': len(self.exact_dict_en_to_zh),
             'regex_rules': len(self.regex_dict),
-            'context_rules': len(self.context_dict)
+            'context_rules': len(self.context_dict),
+            'filter_entries': len(self.filter_dict),
+            'no_translate_entries': len(self.no_translate_list)
         }
     
     def list_entries(self, lang_direction: str = 'all') -> Dict[str, str]:
