@@ -8,9 +8,11 @@
 
 from typing import Dict, List, Optional
 import re
+from .interfaces import IDictionary
+from .cached_dictionary import CachedDictionary
 
 
-class TranslationDictionary:
+class TranslationDictionary(IDictionary):
     """翻译词典类
     
     提供中英文词汇的精确映射，用于修正模型翻译结果
@@ -179,16 +181,19 @@ class TranslationDictionary:
                 'en_to_zh': self.exact_dict_en_to_zh.copy()
             }
 
+    # IDictionary接口实现
+    apply = apply_dictionary
 
-# 全局词典实例
-_global_dictionary: Optional[TranslationDictionary] = None
+
+# 全局词典实例（带缓存）
+_global_dictionary: Optional[IDictionary] = None
 
 
-def get_translation_dictionary() -> TranslationDictionary:
-    """获取全局翻译词典实例"""
+def get_translation_dictionary() -> IDictionary:
+    """获取全局翻译词典实例（带缓存）"""
     global _global_dictionary
     if _global_dictionary is None:
-        _global_dictionary = TranslationDictionary()
+        _global_dictionary = CachedDictionary(TranslationDictionary())
     return _global_dictionary
 
 
@@ -222,7 +227,7 @@ def apply_translation_dictionary(text: str, source_language: str = 'auto', targe
     
     print(f"[词典] 检测到源语言: {source_language}, 目标语言: {target_language}")
     
-    return dictionary.apply_dictionary(text, source_language, target_language)
+    return dictionary.apply(text, source_language, target_language)
 
 
 if __name__ == '__main__':

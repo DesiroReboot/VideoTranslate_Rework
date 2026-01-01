@@ -1,16 +1,15 @@
-"""
-翻译质量评价模块
+"""翻译质量评价模块
 提供多维度翻译质量评分和改进建议
 """
 
 import json
-import time
 import re
-from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
+from typing import Dict, Any, List
+
 from openai import OpenAI
 from config import (
-    DASHSCOPE_API_KEY, 
+    DASHSCOPE_API_KEY,
     DASHSCOPE_BASE_URL,
     SCORING_MODEL,
     SCORE_THRESHOLD,
@@ -21,7 +20,7 @@ from common.security import LLMOutputValidator, OutputValidationError
 
 
 @dataclass
-class TranslationScore:
+class TranslationScore: #pylint:disable-too-many-positional-attributes
     """翻译评分结果"""
     fluency: float  # 流畅度 (0-100)
     completeness: float  # 完整性 (0-100)
@@ -35,7 +34,7 @@ class TranslationScore:
     detailed_feedback: str  # 详细反馈
 
 
-class TranslationScorer:
+class TranslationScorer:  # pylint: disable=too-many-instance-attributes
     """翻译质量评分器"""
     
     def __init__(self):
@@ -120,11 +119,11 @@ class TranslationScorer:
         Returns:
             TranslationScore: 评分结果
         """
-        print(f"\n[评分] 开始评价翻译质量...")
+        print("\n[评分] 开始评价翻译质量...")
         print(f"[评分] 源语言: {source_language}, 目标语言: {target_language}")
         print(f"[评分] 翻译风格: {translation_style}")
         
-        # 获取翻译风格枚举
+        # 获取翻译风格枚举（暂未使用）
         style_enum = get_translation_mode(translation_style)
         weights = self.style_weights.get(style_enum, self.style_weights[VideoStyle.AUTO])
         
@@ -178,8 +177,7 @@ class TranslationScorer:
                         # 对JSON中的每个字段进行安全验证
                         sanitized_score_data = self._sanitize_score_data(score_data)
                         return self._parse_score_data(sanitized_score_data, weights)
-                    else:
-                        raise ValueError("无法找到有效的JSON格式")
+                    raise ValueError("无法找到有效的JSON格式")
                 except (json.JSONDecodeError, ValueError):
                     # 如果JSON解析仍然失败，对整个响应进行安全验证
                     try:
@@ -467,7 +465,7 @@ class TranslationScorer:
         Returns:
             参考译文
         """
-        print(f"[参考译文] 生成参考译文...")
+        print("[参考译文] 生成参考译文...")
         
         # 获取翻译风格枚举
         style_enum = get_translation_mode(translation_style)
@@ -504,7 +502,7 @@ class TranslationScorer:
                 reference_text = LLMOutputValidator.sanitize_translation_output(
                     response.choices[0].message.content
                 )
-                print(f"[参考译文] 参考译文生成成功")
+                print("[参考译文] 参考译文生成成功")
                 return reference_text
             except OutputValidationError as e:
                 print(f"[参考译文] 安全验证失败: {e}")

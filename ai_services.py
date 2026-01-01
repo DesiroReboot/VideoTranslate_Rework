@@ -3,26 +3,28 @@ AI服务模块
 集成阿里云通义千问系列API: ASR、翻译、TTS
 """
 
+import json
 import os
 import time
-import requests
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
-from urllib.parse import unquote
 import dashscope
+import requests
+from pydub import AudioSegment
 from openai import OpenAI
+
 from config import (
     DASHSCOPE_API_KEY, 
     DASHSCOPE_BASE_URL,
     # test_api_key,
     ASR_MODEL, MT_MODEL, TTS_MODEL,
     TTS_VOICE_MAP, DEFAULT_VOICE,
-    TEMP_DIR, load_translation_prompt,
+    TEMP_DIR,
     OSS_ENDPOINT, PROJECT_ROOT,
     OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET_NAME,
     ENABLE_TRANSLATION_SCORING, SCORING_RESULTS_DIR,
     ASR_SCORE_THRESHOLD, ASR_MAX_RETRIES, ENABLE_ASR_SCORING,
-    ASR_SCORING_RESULTS_DIR
+    ASR_SCORING_RESULTS_DIR, MAX_RETRIES
 )
 from common.security import SecurityError, OutputValidationError, LLMOutputValidator, ResourceValidator, InputValidator
 from translation_modes import TranslationModeManager, VideoStyle, get_translation_mode
@@ -33,9 +35,9 @@ from scores.ASR.asr_scorer import AsrScorer, AsrScore
 
 
 # 安全异常类
-class SecurityError(Exception):
-    """安全相关异常"""
-    pass
+# class SecurityError(Exception):
+#     """安全相关异常"""
+#     pass
 
 
 class AIServices:
@@ -88,18 +90,18 @@ class AIServices:
         # 初始化翻译质量评分器
         if ENABLE_TRANSLATION_SCORING:
             self.scorer = TranslationScorer()
-            print(f"[初始化] 翻译质量评分器已启用")
+            print("[初始化] 翻译质量评分器已启用")
         else:
             self.scorer = None
-            print(f"[初始化] 翻译质量评分器已禁用")
+            print("[初始化] 翻译质量评分器已禁用")
         
         # 初始化ASR质量评分器
         if ENABLE_ASR_SCORING:
             self.asr_scorer = AsrScorer()
-            print(f"[初始化] ASR质量评分器已启用")
+            print("[初始化] ASR质量评分器已启用")
         else:
             self.asr_scorer = None
-            print(f"[初始化] ASR质量评分器已禁用")
+            print("[初始化] ASR质量评分器已禁用")
 
     @staticmethod
     def _download_file(url: str, output_path: str) -> None:
@@ -110,7 +112,7 @@ class AIServices:
             url: 文件URL
             output_path: 输出路径
         """
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
         
         with open(output_path, 'wb') as f:
@@ -207,7 +209,7 @@ class AIServices:
                 headers=headers
             )
             print(f"[OSS] 上传成功 - RequestID: {result.request_id}")
-            print(f"[OSS] 文件权限: 公共读（Fun-ASR要求）")
+            print("[OSS] 文件权限: 公共读（Fun-ASR要求）")
         except oss2.exceptions.OssError as e:
             # 详细的OSS错误信息
             raise Exception(
@@ -265,11 +267,11 @@ class AIServices:
             print(f"[ASR] 第{retry_count + 1}次尝试 (最大{ASR_MAX_RETRIES + 1}次)")
             try:
                 # 上传音频到OSS获取公网访问URL
-                print(f"[ASR] 上传音频到OSS...")
+                print("[ASR] 上传音频到OSS...")
                 audio_url = self._upload_to_oss(audio_path)
-                print(f"[ASR] OSS URL生成成功")
+                print("[ASR] OSS URL生成成功")
                 
-                print(f"[ASR] 提交语音识别任务...")
+                print("[ASR] 提交语音识别任务...")
                 
                 # 使用Fun-ASR文件识别API
                 from http import HTTPStatus
@@ -302,12 +304,11 @@ class AIServices:
                     if task_status == 'SUCCEEDED':
                         # 获取识别结果
                         transcription_url = result_response.output['results'][0]['transcription_url']
-                        print(f"[ASR] 识别完成, 下载结果...")
+                        print("[ASR] 识别完成, 下载结果...")
                         
                         # 下载并解析结果
 
-                        import json
-                        resp = requests.get(transcription_url)
+                        resp = requests.get(transcription_url, timeout=30)
                         resp.raise_for_status()
                         result_data = resp.json()
                         
@@ -325,14 +326,14 @@ class AIServices:
                         # 安全验证：清理ASR输出
                         try:
                             text = LLMOutputValidator.sanitize_asr_output(text)
-                            print(f"[ASR] 安全验证通过")
+                            print("[ASR] 安全验证通过")
                         except OutputValidationError as e:
                             print(f"[ASR] 安全验证失败: {e}")
                             raise Exception(f"ASR输出安全验证失败: {e}") from e
                         
                         # ASR质量评分和校正
                         if self.asr_scorer:
-                            print(f"[ASR] 开始质量评分和校正...")
+                            print("[ASR] 开始质量评分和校正...")
                             original_text = text  # 保存原始文本用于评分和记录
                             score_result = self.asr_scorer.score_asr_result(original_text)
                             
@@ -352,7 +353,7 @@ class AIServices:
                         
                         return text
                         
-                    elif task_status == 'FAILED':
+                    if task_status == 'FAILED':
                         raise Exception(f"ASR任务失败: {result_response.output.get('message', 'Unknown error')}")
                     
                     elif task_status in ['PENDING', 'RUNNING']:
@@ -366,14 +367,14 @@ class AIServices:
                     
             except Exception as e:
                 print(f"[ASR] 错误: {str(e)}")
-                print(f"[ASR] 提示: 如果识别失败,请确保:")
-                print(f"      1. OSS bucket已配置且文件上传成功")
-                print(f"      2. 音频格式正确 (支持MP3, WAV等)")
-                print(f"      3. API Key有效且有足够额度")
-                print(f"      4. 音频时长不超过限制")
+                print("[ASR] 提示: 如果识别失败,请确保:")
+                print("      1. OSS bucket已配置且文件上传成功")
+                print("      2. 音频格式正确 (支持MP3, WAV等)")
+                print("      3. API Key有效且有足够额度")
+                print("      4. 音频时长不超过限制")
                 
                 # 返回占位文本用于测试
-                print(f"\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
+                print("\n[ASR] 警告: 识别失败,返回模拟文本用于测试")
                 return "这是一段测试文本。由于语音识别API调用失败,这里返回占位内容。请配置正确的API Key和OSS后重试。"
     
     def set_translation_mode(self, style: str) -> None:
@@ -575,7 +576,6 @@ class AIServices:
         
         # 设置最大重试次数
         if max_retries is None:
-            from config import MAX_RETRIES
             max_retries = MAX_RETRIES
         
         best_translation = ""
@@ -603,12 +603,12 @@ class AIServices:
             
             if score is None:
                 # 评分失败，但翻译成功
-                print(f"[翻译重试] 评分失败，使用翻译结果")
+                print("[翻译重试] 评分失败，使用翻译结果")
                 return translated_text, None
             
             # 检查是否需要重试
             if not self.scorer.should_retry(score, retry_count):
-                print(f"[翻译重试] 翻译质量达标，无需重试")
+                print("[翻译重试] 翻译质量达标，无需重试")
                 return translated_text, score
             
             # 保存最佳翻译
@@ -619,18 +619,17 @@ class AIServices:
             # 提供改进建议
             suggestions = self.scorer.provide_improvement_suggestions(score)
             if suggestions:
-                print(f"[翻译重试] 改进建议:")
+                print("[翻译重试] 改进建议:")
                 for i, suggestion in enumerate(suggestions, 1):
                     print(f"  {i}. {suggestion}")
             
             retry_count += 1
         
         # 所有重试都完成，使用最佳结果
-        print(f"[翻译重试] 已达到最大重试次数，使用最佳结果")
+        print("[翻译重试] 已达到最大重试次数，使用最佳结果")
         if best_score:
             return best_translation, best_score
-        else:
-            return translated_text, score
+        return translated_text, score
     
     def _translate_with_adjusted_params(
         self, 
@@ -651,7 +650,7 @@ class AIServices:
         Returns:
             翻译结果
         """
-        print(f"[参数调整] 根据重试次数调整翻译参数...")
+        print("[参数调整] 根据重试次数调整翻译参数...")
         
         # 获取当前翻译模式
         current_mode = self.mode_manager.get_current_mode()
@@ -676,7 +675,7 @@ class AIServices:
             # 更多重试，使用中等temperature
             adjusted_params = base_params.copy()
             adjusted_params["temperature"] = 0.5
-            print(f"[参数调整] 设置temperature为 0.5")
+            print("[参数调整] 设置temperature为 0.5")
         
         # 格式化系统提示词
         system_prompt = self.mode_manager.format_prompt(
@@ -744,9 +743,6 @@ class AIServices:
             translation_style: 翻译风格
         """
         try:
-            import json
-
-            
             # 生成文件名
             timestamp = int(time.time())
             filename = f"translation_score_{timestamp}.json"
@@ -800,9 +796,6 @@ class AIServices:
             audio_path: 可选音频文件路径
         """
         try:
-            import json
-
-            
             # 生成文件名
             timestamp = int(time.time())
             filename = f"asr_score_{timestamp}.json"
@@ -855,7 +848,7 @@ class AIServices:
         Raises:
             Exception: 合成失败
         """
-        print(f"\n[TTS] 开始语音合成")
+        print("\n[TTS] 开始语音合成")
         print(f"[TTS] 文本长度: {len(text)} 字符")
         print(f"[TTS] 语言: {language}")
         
@@ -866,16 +859,16 @@ class AIServices:
             print(f"[TTS] 音色: {voice}")
             
             # TTS API限制：单次最多600字符
-            MAX_TTS_LENGTH = 600
+            max_tts_length = 600
             
-            if len(text) <= MAX_TTS_LENGTH:
+            if len(text) <= max_tts_length:
                 # 文本较短，直接合成
-                print(f"[TTS] 文本较短，直接合成")
+                print("[TTS] 文本较短，直接合成")
                 return self._synthesize_single(text, voice, language, output_path)
             else:
                 # 文本过长，需要分段处理并合并
-                print(f"[TTS] 文本过长，需要分段处理（每段最多{MAX_TTS_LENGTH}字符）")
-                return self._synthesize_long_text(text, voice, language, output_path, MAX_TTS_LENGTH)
+                print(f"[TTS] 文本过长，需要分段处理（每段最多{max_tts_length}字符）")
+                return self._synthesize_long_text(text, voice, language, output_path, max_tts_length)
                 
         except Exception as e:
             raise Exception(f"语音合成失败: {str(e)}")
@@ -918,7 +911,6 @@ class AIServices:
         """
         分段合成长文本并合并音频
         """
-        from pydub import AudioSegment
         
         # 按句子分割文本
         sentences = text.replace('。', '.|').replace('.', '.|').replace('!', '!|').replace('?', '?|').split('|')

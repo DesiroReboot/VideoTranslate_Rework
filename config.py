@@ -59,6 +59,13 @@ TEMP_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR = PROJECT_ROOT / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# B站Cookie配置（可选 - 用于下载需要登录的视频）
+# 设置方式：
+# 1. 在浏览器登录B站
+# 2. 导出Cookie到文件
+# 3. 取消下面的注释并设置路径
+BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
+
 # ==================== 下载配置 ====================
 # yt-dlp下载参数
 YT_DLP_OPTIONS = {
@@ -71,7 +78,10 @@ YT_DLP_OPTIONS = {
     'no_warnings': False,
     # 修复HTTP 412错误 - 添加B站需要的请求头
     'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ),
         'Referer': 'https://www.bilibili.com/',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -79,7 +89,7 @@ YT_DLP_OPTIONS = {
         'Origin': 'https://www.bilibili.com',
     },
     # 添加Cookie支持（如果需要登录观看的视频）
-    # 'cookiefile': str(PROJECT_ROOT / 'bilibili_cookies.txt'),  # 如果有cookie文件再启用
+    'cookiefile': str(BILIBILI_COOKIE_FILE),  # 如果有cookie文件再启用
     # 其他重要选项
     'nocheckcertificate': True,  # 忽略SSL证书验证问题
     'geo_bypass': True,  # 绕过地理限制
@@ -94,20 +104,29 @@ YT_DLP_OPTIONS = {
     'extractor_args': {
         'bilibili': {
             'skip_wbi': True,  # 跳过WBI签名，有时会导致问题
+            'skip_api_wbi': True,  # 跳过API的WBI签名
+            'use_bilibili_app_api': False,  # 不使用B站APP API
+            'use_bilibili_h5_api': True,  # 使用H5 API，可能更稳定
+            'prefer_bvid': True,  # 优先使用BV号
             'headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                ),
                 'Referer': 'https://www.bilibili.com/',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
             }
         }
-    }
+    },
+    # 额外的错误处理选项
+    'extractor_retries': 5,  # 提取器重试次数
+    'ignore_no_formats_error': True,  # 忽略无格式错误
+    'force_generic_extractor': False,  # 不强制使用通用提取器
+    'allow_unplayable_formats': False,  # 不允许无法播放的格式
 }
 
-# B站Cookie配置（可选 - 用于下载需要登录的视频）
-# 设置方式：
-# 1. 在浏览器登录B站
-# 2. 导出Cookie到文件
-# 3. 取消下面的注释并设置路径
-BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
+
 
 # ==================== 音视频参数 ====================
 # 音频采样率
@@ -146,7 +165,7 @@ SCORING_RESULTS_DIR.mkdir(exist_ok=True)
 ASR_SCORE_THRESHOLD = 60
 
 # ASR最大重试次数
-ASR_MAX_RETRIES = 1
+ASR_MAX_RETRIES = 2
 
 # 是否启用ASR质量评分
 ENABLE_ASR_SCORING = True

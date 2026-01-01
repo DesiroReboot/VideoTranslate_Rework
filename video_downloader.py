@@ -11,8 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 import yt_dlp
-from config import YT_DLP_OPTIONS, TEMP_DIR, OUTPUT_DIR
-from bv_utils import normalize_bilibili_url, extract_bv_from_url
+from config import YT_DLP_OPTIONS, TEMP_DIR, OUTPUT_DIR, BILIBILI_COOKIE_FILE
+from bv_utils import normalize_bilibili_url, extract_bv_from_url, download_bilibili_via_api
 from common.security import PathSecurityValidator, URLValidator, FileValidator, SecurityError
 
 
@@ -229,9 +229,9 @@ class VideoDownloader:
         # 增强调试选项
         ydl_opts.update({
             'verbose': True,  # 启用详细输出
-            'dump_intermediate_pages': True,  # 转储中间页面
-            'write_pages': True,  # 写入页面到文件
-            'load_pages': True,  # 加载页面
+            'dump_intermediate_pages': False,  # 不再转储中间页面
+            'write_pages': False,  # 不再写入页面到文件
+            'load_pages': False,  # 不再加载页面
             'no_color': True,  # 禁用颜色输出
             'progress_hooks': [],  # 进度钩子（可添加自定义钩子）
             'logger': debug_logger,  # 使用自定义logger
@@ -296,7 +296,13 @@ class VideoDownloader:
             except Exception as manual_err:
                 debug_logger.error(f"手动获取页面失败: {manual_err}")
             
-            raise ValueError(f"下载B站视频失败: JSON解析错误 - {str(json_err)}")
+            # 尝试备用下载策略
+            debug_logger.info("JSON解析错误，尝试备用下载策略...")
+            try:
+                return VideoDownloader._try_backup_download_strategy(url, bv_id, debug_logger, output_path)
+            except Exception as backup_err:
+                debug_logger.error(f"备用下载策略也失败: {backup_err}")
+                raise ValueError(f"下载B站视频失败: JSON解析错误 - {str(json_err)}")
                 
         except Exception as e:
             debug_logger.error(f"下载过程发生异常: {e}")
@@ -316,7 +322,175 @@ class VideoDownloader:
             except Exception as save_err:
                 debug_logger.error(f"保存原始响应失败: {save_err}")
             
-            raise ValueError(f"下载B站视频失败: {str(e)}")
+            # 尝试备用下载策略
+            debug_logger.info("主下载失败，尝试备用下载策略...")
+            try:
+                return VideoDownloader._try_backup_download_strategy(url, bv_id, debug_logger, output_path)
+            except Exception as backup_err:
+                debug_logger.error(f"备用下载策略也失败: {backup_err}")
+                raise ValueError(f"下载B站视频失败: {str(e)}")
+    
+    @staticmethod
+    def _try_backup_download_strategy(url: str, bv_id: Optional[str], debug_logger: BilibiliDebugLogger, output_path: Optional[str] = None) -> Tuple[str, Optional[str]]:
+        """
+        尝试备用下载策略
+        
+        Args:
+            url: B站视频URL
+            bv_id: BV号
+            debug_logger: 调试日志记录器
+            output_path: 可选的输出路径
+            
+        Returns:
+            (下载后的视频文件路径, BV号) 的元组
+            
+        Raises:
+            ValueError: 所有备用策略都失败
+        """
+        debug_logger.info("尝试备用下载策略...")
+        
+        backup_strategies = [
+            {
+                'name': '简化配置策略',
+                'opts': {
+                    'format': 'best',
+                    'quiet': True,
+                    'no_warnings': True,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/',
+                    },
+                    'extractor_args': {
+                        'bilibili': {
+                            'skip_wbi': True,
+                            'use_bilibili_h5_api': True,
+                        }
+                    }
+                }
+            },
+            {
+                'name': '通用提取器策略',
+                'opts': {
+                    'format': 'best',
+                    'force_generic_extractor': True,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/',
+                    }
+                }
+            },
+            {
+                'name': '最小化配置策略',
+                'opts': {
+                    'format': 'best',
+                    'quiet': True,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0',
+                        'Referer': 'https://www.bilibili.com/',
+                    },
+                    'extractor_args': {
+                        'bilibili': {
+                            'skip_wbi': True,
+                            'skip_api_wbi': True,
+                        }
+                    }
+                }
+            },
+            {
+                'name': '激进配置策略',
+                'opts': {
+                    'format': 'best',
+                    'quiet': False,
+                    'no_warnings': False,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                        'Referer': 'https://www.bilibili.com/',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Origin': 'https://www.bilibili.com',
+                    },
+                    'extractor_args': {
+                        'bilibili': {
+                            'skip_wbi': True,
+                            'skip_api_wbi': True,
+                            'use_bilibili_app_api': False,
+                            'use_bilibili_h5_api': True,
+                            'prefer_bvid': True,
+                            'disable_bili_live_api': True,
+                        }
+                    },
+                    'force_generic_extractor': False,
+                    'ignoreerrors': True,
+                    'retries': 15,
+                    'fragment_retries': 15,
+                    'skip_unavailable_fragments': True,
+                    'nocheckcertificate': True,
+                    'geo_bypass': True,
+                    'cookiefile': str(BILIBILI_COOKIE_FILE) if BILIBILI_COOKIE_FILE.exists() else None,
+                }
+            }
+        ]
+        
+        for i, strategy in enumerate(backup_strategies):
+            debug_logger.info(f"尝试备用策略 {i+1}: {strategy['name']}")
+            try:
+                ydl_opts = YT_DLP_OPTIONS.copy()
+                ydl_opts.update(strategy['opts'])
+                
+                # 设置输出模板
+                if output_path:
+                    ydl_opts['outtmpl'] = str(output_path)
+                elif bv_id:
+                    ydl_opts['outtmpl'] = str(TEMP_DIR / f"{bv_id}.%(ext)s")
+                
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    
+                    if 'requested_downloads' in info and info['requested_downloads']:
+                        downloaded_file = info['requested_downloads'][0]['filepath']
+                    else:
+                        ext = info.get('ext', 'mp4')
+                        if bv_id:
+                            downloaded_file = str(TEMP_DIR / f"{bv_id}.{ext}")
+                        else:
+                            title = info.get('title', 'video')
+                            downloaded_file = str(TEMP_DIR / f"{title}.{ext}")
+                    
+                    debug_logger.info(f"备用策略 {strategy['name']} 成功: {downloaded_file}")
+                    return downloaded_file, bv_id
+                    
+            except Exception as e:
+                debug_logger.warning(f"备用策略 {strategy['name']} 失败: {e}")
+                continue
+        
+        # 如果所有yt-dlp备用策略都失败，尝试B站API直接下载
+        debug_logger.info("所有yt-dlp备用策略都失败，尝试B站API直接下载...")
+        if bv_id:
+            try:
+                # 构建输出路径
+                if output_path:
+                    api_output_path = output_path
+                else:
+                    api_output_path = str(TEMP_DIR / f"{bv_id}_api_download.mp4")
+                
+                debug_logger.info(f"使用B站API直接下载视频: {bv_id}")
+                debug_logger.info(f"输出路径: {api_output_path}")
+                
+                # 使用API下载
+                success = download_bilibili_via_api(bv_id, api_output_path)
+                
+                if success and os.path.exists(api_output_path) and os.path.getsize(api_output_path) > 0:
+                    debug_logger.info(f"B站API直接下载成功: {api_output_path}")
+                    return api_output_path, bv_id
+                else:
+                    debug_logger.warning(f"B站API直接下载失败或文件无效")
+            except Exception as api_err:
+                debug_logger.error(f"B站API直接下载异常: {api_err}")
+                import traceback
+                debug_logger.error(f"API错误追踪: {traceback.format_exc()}")
+        
+        raise ValueError("所有备用下载策略都失败，包括B站API直接下载")
     
     @staticmethod
     def prepare_video(url_or_path: str) -> Tuple[str, Optional[str]]:
