@@ -6,22 +6,32 @@
 """
 
 from .interfaces import IDictionary
-from .translation_dictionary import TranslationDictionary, get_translation_dictionary, apply_translation_dictionary
+from .translation_dictionary import (
+    TranslationDictionary,
+    get_translation_dictionary,
+    apply_translation_dictionary,
+)
 from .cached_dictionary import CachedDictionary
-from .plugin_manager import DictionaryPluginManager, get_plugin_manager, register_dictionary_plugin, get_dictionary_plugin, get_default_dictionary
+from .plugin_manager import (
+    DictionaryPluginManager,
+    get_plugin_manager,
+    register_dictionary_plugin,
+    get_dictionary_plugin,
+    get_default_dictionary,
+)
 from .dictionary_config import DictionaryConfig, config
 
 __all__ = [
-    'IDictionary',
-    'TranslationDictionary',
-    'CachedDictionary',
-    'DictionaryPluginManager',
-    'DictionaryConfig',
-    'config',
-    'get_translation_dictionary',
-    'apply_translation_dictionary',
-    'get_plugin_manager',
-    'register_dictionary_plugin',
-    'get_dictionary_plugin',
-    'get_default_dictionary'
+    "IDictionary",
+    "TranslationDictionary",
+    "CachedDictionary",
+    "DictionaryPluginManager",
+    "DictionaryConfig",
+    "config",
+    "get_translation_dictionary",
+    "apply_translation_dictionary",
+    "get_plugin_manager",
+    "register_dictionary_plugin",
+    "get_dictionary_plugin",
+    "get_default_dictionary",
 ]

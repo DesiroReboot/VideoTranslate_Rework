@@ -10,8 +10,9 @@ from dataclasses import dataclass
 
 class VideoStyle(Enum):
     """视频风格枚举"""
+
     HUMOROUS = "humorous"  # 幽默风格
-    SERIOUS = "serious"   # 正经风格
+    SERIOUS = "serious"  # 正经风格
     EDUCATIONAL = "educational"  # 教育风格
     ENTERTAINMENT = "entertainment"  # 娱乐风格
     NEWS = "news"  # 新闻风格
@@ -21,6 +22,7 @@ class VideoStyle(Enum):
 @dataclass
 class TranslationMode:
     """翻译模式配置"""
+
     name: str
     description: str
     system_prompt: str
@@ -29,7 +31,7 @@ class TranslationMode:
     max_tokens: Optional[int] = None
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
-    
+
     def get_model_params(self) -> Dict[str, Any]:
         """获取模型参数"""
         params = {
@@ -45,11 +47,11 @@ class TranslationMode:
 
 class TranslationModeManager:
     """翻译模式管理器"""
-    
+
     def __init__(self):
         self.modes = self._initialize_modes()
         self.current_mode = None
-    
+
     def _initialize_modes(self) -> Dict[VideoStyle, TranslationMode]:
         """初始化所有翻译模式"""
         return {
@@ -78,9 +80,8 @@ class TranslationModeManager:
                 temperature=0.7,  # 较高温度，增加创造性
                 top_p=0.9,
                 presence_penalty=0.3,
-                frequency_penalty=0.2
+                frequency_penalty=0.2,
             ),
-            
             VideoStyle.SERIOUS: TranslationMode(
                 name="正经风格",
                 description="适用于教育、新闻、纪录片等严肃内容，注重准确性和专业性",
@@ -106,9 +107,8 @@ class TranslationModeManager:
                 temperature=0.2,  # 较低温度，确保准确性
                 top_p=0.8,
                 presence_penalty=0.0,
-                frequency_penalty=0.1
+                frequency_penalty=0.1,
             ),
-            
             VideoStyle.EDUCATIONAL: TranslationMode(
                 name="教育风格",
                 description="适用于教学、科普类视频，平衡准确性和易懂性",
@@ -134,9 +134,8 @@ class TranslationModeManager:
                 temperature=0.4,
                 top_p=0.85,
                 presence_penalty=0.1,
-                frequency_penalty=0.1
+                frequency_penalty=0.1,
             ),
-            
             VideoStyle.ENTERTAINMENT: TranslationMode(
                 name="娱乐风格",
                 description="适用于综艺、访谈等娱乐内容，保持轻松活泼的氛围",
@@ -162,9 +161,8 @@ class TranslationModeManager:
                 temperature=0.6,
                 top_p=0.9,
                 presence_penalty=0.2,
-                frequency_penalty=0.2
+                frequency_penalty=0.2,
             ),
-            
             VideoStyle.NEWS: TranslationMode(
                 name="新闻风格",
                 description="适用于新闻报道、时事评论等内容，注重客观性和时效性",
@@ -190,9 +188,8 @@ class TranslationModeManager:
                 temperature=0.1,  # 最低温度，确保客观性
                 top_p=0.7,
                 presence_penalty=0.0,
-                frequency_penalty=0.0
+                frequency_penalty=0.0,
             ),
-            
             VideoStyle.AUTO: TranslationMode(
                 name="自动检测",
                 description="自动检测视频风格并选择最适合的翻译模式",
@@ -218,14 +215,14 @@ class TranslationModeManager:
                 temperature=0.5,  # 中等温度，平衡准确性和创造性
                 top_p=0.85,
                 presence_penalty=0.1,
-                frequency_penalty=0.1
-            )
+                frequency_penalty=0.1,
+            ),
         }
-    
+
     def get_mode(self, style: VideoStyle) -> TranslationMode:
         """获取指定风格的翻译模式"""
         return self.modes.get(style, self.modes[VideoStyle.AUTO])
-    
+
     def set_mode(self, style: VideoStyle) -> None:
         """设置当前翻译模式"""
         self.current_mode = self.get_mode(style)
@@ -234,23 +231,24 @@ class TranslationModeManager:
             print(f"[翻译模式] {self.current_mode.description}")
         else:
             print(f"[翻译模式] 警告: 无法找到风格 {style.value} 的模式")
-    
+
     def get_current_mode(self) -> Optional[TranslationMode]:
         """获取当前翻译模式"""
         return self.current_mode
-    
+
     def list_modes(self) -> None:
         """列出所有可用的翻译模式"""
         print("\n=== 可用翻译模式 ===")
         for style, mode in self.modes.items():
             print(f"{style.value}: {mode.name} - {mode.description}")
         print("===================\n")
-    
-    def format_prompt(self, mode: TranslationMode, source_language: str, target_language: str) -> str:
+
+    def format_prompt(
+        self, mode: TranslationMode, source_language: str, target_language: str
+    ) -> str:
         """格式化系统提示词"""
         return mode.system_prompt.format(
-            source_language=source_language,
-            target_language=target_language
+            source_language=source_language, target_language=target_language
         )
 
 

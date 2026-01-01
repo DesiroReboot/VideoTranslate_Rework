@@ -33,16 +33,16 @@ OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME")
 # ==================== TTS音色配置 ====================
 # 根据目标语言自动选择合适音色
 TTS_VOICE_MAP = {
-    "Chinese": "Cherry",        # ✅ 阿里云标准名称（中文女声）
-    "English": "Cherry",           # ✅ 阿里云标准名称（英文女声）
-    "Japanese": "Cherry",        # ✅ 阿里云标准名称（日文女声）
-    "Korean": "Cherry",          # ✅ 阿里云标准名称（韩文女声）
-    "Spanish": "Cherry",         # ✅ 阿里云标准名称（西班牙语女声）
-    "French": "Cherry",          # ✅ 阿里云标准名称（法语女声）
-    "German": "Cherry",           # ✅ 阿里云标准名称（德文女声）
-    "Russian": "Cherry",          # ✅ 阿里云标准名称（俄文女声）
-    "Italian": "Cherry",         # ✅ 阿里云标准名称（意大利语女声）
-    "Portuguese": "Cherry",      # ✅ 阿里云标准名称（葡萄牙语女声）
+    "Chinese": "Cherry",  # ✅ 阿里云标准名称（中文女声）
+    "English": "Cherry",  # ✅ 阿里云标准名称（英文女声）
+    "Japanese": "Cherry",  # ✅ 阿里云标准名称（日文女声）
+    "Korean": "Cherry",  # ✅ 阿里云标准名称（韩文女声）
+    "Spanish": "Cherry",  # ✅ 阿里云标准名称（西班牙语女声）
+    "French": "Cherry",  # ✅ 阿里云标准名称（法语女声）
+    "German": "Cherry",  # ✅ 阿里云标准名称（德文女声）
+    "Russian": "Cherry",  # ✅ 阿里云标准名称（俄文女声）
+    "Italian": "Cherry",  # ✅ 阿里云标准名称（意大利语女声）
+    "Portuguese": "Cherry",  # ✅ 阿里云标准名称（葡萄牙语女声）
 }
 
 DEFAULT_VOICE = "Cherry"  # 默认音色
@@ -71,61 +71,60 @@ BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
 YT_DLP_OPTIONS = {
     # 修复HTTP 412 - 使用更通用的格式选择
     # 优先选择720P，如果失败则自动降级
-    'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best',
-    'outtmpl': str(TEMP_DIR / '%(epoch)s.%(ext)s'),  # 使用时间戳避免中文文件名
-    'merge_output_format': 'mp4',  # 合并为mp4格式
-    'quiet': False,
-    'no_warnings': False,
+    "format": "bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best",
+    "outtmpl": str(TEMP_DIR / "%(epoch)s.%(ext)s"),  # 使用时间戳避免中文文件名
+    "merge_output_format": "mp4",  # 合并为mp4格式
+    "quiet": False,
+    "no_warnings": False,
     # 修复HTTP 412错误 - 添加B站需要的请求头
-    'http_headers': {
-        'User-Agent': (
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    "http_headers": {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ),
-        'Referer': 'https://www.bilibili.com/',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Origin': 'https://www.bilibili.com',
+        "Referer": "https://www.bilibili.com/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Origin": "https://www.bilibili.com",
     },
     # 添加Cookie支持（如果需要登录观看的视频）
-    'cookiefile': str(BILIBILI_COOKIE_FILE),  # 如果有cookie文件再启用
+    "cookiefile": str(BILIBILI_COOKIE_FILE),  # 如果有cookie文件再启用
     # 其他重要选项
-    'nocheckcertificate': True,  # 忽略SSL证书验证问题
-    'geo_bypass': True,  # 绕过地理限制
+    "nocheckcertificate": True,  # 忽略SSL证书验证问题
+    "geo_bypass": True,  # 绕过地理限制
     # 增强选项以解决JSON解析错误
-    'retries': 10,  # 增加重试次数
-    'fragment_retries': 10,
-    'skip_unavailable_fragments': True,
-    'extract_flat': False,
-    'ignoreerrors': False,
-    'no_color': True,
-    'socket_timeout': 30,
-    'extractor_args': {
-        'bilibili': {
-            'skip_wbi': True,  # 跳过WBI签名，有时会导致问题
-            'skip_api_wbi': True,  # 跳过API的WBI签名
-            'use_bilibili_app_api': False,  # 不使用B站APP API
-            'use_bilibili_h5_api': True,  # 使用H5 API，可能更稳定
-            'prefer_bvid': True,  # 优先使用BV号
-            'headers': {
-                'User-Agent': (
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    "retries": 10,  # 增加重试次数
+    "fragment_retries": 10,
+    "skip_unavailable_fragments": True,
+    "extract_flat": False,
+    "ignoreerrors": False,
+    "no_color": True,
+    "socket_timeout": 30,
+    "extractor_args": {
+        "bilibili": {
+            "skip_wbi": True,  # 跳过WBI签名，有时会导致问题
+            "skip_api_wbi": True,  # 跳过API的WBI签名
+            "use_bilibili_app_api": False,  # 不使用B站APP API
+            "use_bilibili_h5_api": True,  # 使用H5 API，可能更稳定
+            "prefer_bvid": True,  # 优先使用BV号
+            "headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 ),
-                'Referer': 'https://www.bilibili.com/',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-            }
+                "Referer": "https://www.bilibili.com/",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            },
         }
     },
     # 额外的错误处理选项
-    'extractor_retries': 5,  # 提取器重试次数
-    'ignore_no_formats_error': True,  # 忽略无格式错误
-    'force_generic_extractor': False,  # 不强制使用通用提取器
-    'allow_unplayable_formats': False,  # 不允许无法播放的格式
+    "extractor_retries": 5,  # 提取器重试次数
+    "ignore_no_formats_error": True,  # 忽略无格式错误
+    "force_generic_extractor": False,  # 不强制使用通用提取器
+    "allow_unplayable_formats": False,  # 不允许无法播放的格式
 }
-
 
 
 # ==================== 音视频参数 ====================
@@ -179,26 +178,28 @@ ASR_ERROR_MAPPINGS = {
     "阿萨": {
         "corrected": "阿SIR",
         "context_keywords": ["警察", "抓", "追", "查", "办案", "执法", "嫌疑", "罪犯"],
-        "description": "ASR将'阿SIR'错误识别为'阿萨'"
+        "description": "ASR将'阿SIR'错误识别为'阿萨'",
     },
     # 可以添加更多ASR错误映射
 }
 
+
 def load_translation_prompt(target_language: str) -> str:
     """
     加载翻译系统提示词并替换目标语言
-    
+
     Args:
         target_language: 目标语言
-        
+
     Returns:
         格式化后的系统提示词
     """
     if TRANSLATION_SYSTEM_PROMPT_FILE.exists():
-        content = TRANSLATION_SYSTEM_PROMPT_FILE.read_text(encoding='utf-8')
+        content = TRANSLATION_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
         return content.replace("{target_language}", target_language)
     else:
         return f"You are a professional translator. Translate the following text to {target_language}."
+
 
 # ==================== 验证函数 ====================
 def validate_config():
@@ -206,10 +207,10 @@ def validate_config():
     if not DASHSCOPE_API_KEY:
         raise ValueError(
             "未配置DASHSCOPE_API_KEY!\n"
-            "请在环境变量中设置: setx DASHSCOPE_API_KEY \"your_api_key_here\""
+            '请在环境变量中设置: setx DASHSCOPE_API_KEY "your_api_key_here"'
         )
-    
+
     if not TRANSLATION_SYSTEM_PROMPT_FILE.exists():
         print(f"警告: 未找到翻译提示词文件 {TRANSLATION_SYSTEM_PROMPT_FILE}")
-    
+
     return True
