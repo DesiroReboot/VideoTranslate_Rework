@@ -6,6 +6,9 @@
 import os
 from pathlib import Path
 
+# 导入词典配置
+from common.dictionary.dictionary_config import config as dictionary_config
+
 # ==================== API配置 ====================
 # 阿里云API Key - 请在环境变量中配置 DASHSCOPE_API_KEY
 # Windows设置方式: setx DASHSCOPE_API_KEY "your_api_key_here"
@@ -21,22 +24,8 @@ ASR_MODEL = "fun-asr"  # 支持50+语言,适合多语言视频,支持文件URL�
 # ASR语言提示优化（中英文混合视频优化）
 ASR_LANGUAGE_HINTS = ["zh", "zh-CN", "en", "fr"]  # 中文简体、英文、法语
 
-# ASR专有名词词典（针对常见识别错误）
-ASR_CUSTOM_VOCABULARY = [
-    # 媒体/机构名称
-    "法新社", "新华社", "CNN", "BBC",
-
-    # 网络用语/梗
-    "说唱battle", "rap battle", "百年战争", "fish and chips",
-
-    # 人名/称呼
-    "小鹿绅士", "法兰西", "英格兰",
-
-    # 成语/固定搭配
-    "勿谓言之不预也", "丢盔弃甲", "满地找牙",
-
-    # 可根据需要添加更多专有名词
-]
+# ASR专有名词词典（从dictionary_config导入）
+ASR_CUSTOM_VOCABULARY = dictionary_config.asr_custom_vocabulary
 
 # 是否启用ASR LLM后处理修复（针对低分文本）
 ASR_ENABLE_LLM_POSTPROCESS = True

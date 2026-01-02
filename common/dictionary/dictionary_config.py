@@ -118,6 +118,30 @@ class DictionaryConfig:
         "SQL",
     ]
 
+    # ASR专有名词词典（针对常见识别错误）
+    # 用于Fun-ASR的language_hints参数，提高识别准确率
+    asr_custom_vocabulary: List[str] = [
+        # 媒体/机构名称
+        "法新社",
+        "新华社",
+        "CNN",
+        "BBC",
+        # 网络用语/梗
+        "说唱battle",
+        "rap battle",
+        "百年战争",
+        "fish and chips",
+        # 人名/称呼
+        "小鹿绅士",
+        "法兰西",
+        "英格兰",
+        # 成语/固定搭配
+        "勿谓言之不预也",
+        "丢盔弃甲",
+        "满地找牙",
+        # 可根据需要添加更多专有名词
+    ]
+
 
 # 提供全局配置实例
 config = DictionaryConfig()
