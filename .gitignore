@@ -56,6 +56,7 @@ __pycache__/
 # 环境变量
 .env
 .env.local
+.env.example
 
 # 日志
 *.log
@@ -63,3 +64,25 @@ __pycache__/
 # 操作系统
 .DS_Store
 Thumbs.db
+
+# 敏感文件
+*.cookies
+*_cookies.txt
+*_cookies.json
+*bilibili_cookies*
+*_secret*
+*_key*
+*_password*
+*_token*
+
+# IDE本地设置
+.claude/settings.local.json
+.vscode/settings.json.local
+.idea/workspace.xml
+
+# 评分历史（可选，包含个人数据）
+asr_score_history.json
+
+# 计划文档（可选，保留在本地）
+*_improve_plan.txt
+*_plan.txt
