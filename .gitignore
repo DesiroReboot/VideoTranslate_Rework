@@ -82,7 +82,18 @@ Thumbs.db
 
 # 评分历史（可选，包含个人数据）
 asr_score_history.json
+asr_score_history*.json
 
 # 计划文档（可选，保留在本地）
 *_improve_plan.txt
 *_plan.txt
+asr_improve_plan.txt
+
+# 代码质量报告（本地生成，不需要追踪）
+code_quality_report/
+
+# CHANGELOG（本地生成，不需要追踪）
+CHANGELOG.md
+
+# 工具配置（本地配置）
+cliff.toml
