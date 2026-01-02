@@ -1,0 +1,17 @@
+[
+  {
+    "keywords": [
+      "阿SIR",
+      "警察",
+      "警官"
+    ],
+    "context_patterns": [
+      "抓",
+      "追",
+      "查",
+      "办案"
+    ],
+    "translation": "police",
+    "description": "执法相关语境"
+  }
+]

@@ -18,6 +18,32 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 # 语音识别模型 (ASR) - 使用Fun-ASR支持文件URL识别
 ASR_MODEL = "fun-asr"  # 支持50+语言,适合多语言视频,支持文件URL识别
 
+# ASR语言提示优化（中英文混合视频优化）
+ASR_LANGUAGE_HINTS = ["zh", "zh-CN", "en", "fr"]  # 中文简体、英文、法语
+
+# ASR专有名词词典（针对常见识别错误）
+ASR_CUSTOM_VOCABULARY = [
+    # 媒体/机构名称
+    "法新社", "新华社", "CNN", "BBC",
+
+    # 网络用语/梗
+    "说唱battle", "rap battle", "百年战争", "fish and chips",
+
+    # 人名/称呼
+    "小鹿绅士", "法兰西", "英格兰",
+
+    # 成语/固定搭配
+    "勿谓言之不预也", "丢盔弃甲", "满地找牙",
+
+    # 可根据需要添加更多专有名词
+]
+
+# 是否启用ASR LLM后处理修复（针对低分文本）
+ASR_ENABLE_LLM_POSTPROCESS = True
+
+# LLM后处理触发的评分阈值
+ASR_LLM_POSTPROCESS_THRESHOLD = 65  # 低于此分数触发LLM修复
+
 # 机器翻译模型 (MT)
 MT_MODEL = "qwen-max"  # 使用Qwen3-max，支持自定义prompt
 
@@ -29,6 +55,16 @@ OSS_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com"
 OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID")
 OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET")
 OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME")
+
+# OSS安全加固配置
+# 是否启用UUID文件名混淆（默认启用）
+OSS_ENABLE_UUID_FILENAME = True
+
+# 是否在识别完成后自动删除OSS文件（默认启用）
+OSS_AUTO_CLEANUP = True
+
+# OSS文件生命周期规则（天数），仅用于兜底清理（默认1天）
+OSS_LIFECYCLE_DAYS = 1
 
 # ==================== TTS音色配置 ====================
 # 根据目标语言自动选择合适音色
@@ -161,6 +197,7 @@ SCORING_RESULTS_DIR.mkdir(exist_ok=True)
 
 # ==================== ASR质量评分配置 ====================
 # ASR评分阈值 - 低于此分数将触发重试
+# 注意：如果启用了自适应阈值，此值仅作为初始基线
 ASR_SCORE_THRESHOLD = 60
 
 # ASR最大重试次数
@@ -172,6 +209,26 @@ ENABLE_ASR_SCORING = True
 # ASR评分结果保存目录
 ASR_SCORING_RESULTS_DIR = OUTPUT_DIR / "asr_scoring_results"
 ASR_SCORING_RESULTS_DIR.mkdir(exist_ok=True)
+
+# ==================== ASR评分数据收集与基线建立 ====================
+# 是否启用评分数据收集（用于建立质量基线）
+ASR_ENABLE_SCORE_COLLECTION = True
+
+# ASR评分历史数据文件（JSON格式）
+ASR_SCORE_HISTORY_FILE = PROJECT_ROOT / "asr_score_history.json"
+
+# 自适应ASR评分阈值
+# 基于历史评分数据的动态阈值，每5次评分更新一次
+ASR_ENABLE_ADAPTIVE_THRESHOLD = True
+
+# 自适应阈值计算方式：moving_avg（移动平均）或 percentile（百分位数）
+ASR_ADAPTIVE_THRESHOLD_METHOD = "moving_avg"  # 或 "percentile"
+
+# 移动平均窗口大小（最近N次评分）
+ASR_MOVING_AVG_WINDOW = 5
+
+# 百分位数阈值（0-100），低于此百分位数的视为需要重试
+ASR_PERCENTILE_THRESHOLD = 20  # 即底部20%的分数
 
 # ASR常见错误映射 - 用于校正识别结果
 ASR_ERROR_MAPPINGS = {

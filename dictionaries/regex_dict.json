@@ -1,0 +1,12 @@
+[
+  {
+    "pattern": "阿[Ss][Ii][Rr]",
+    "replacement": "police",
+    "description": "阿SIR的各种写法"
+  },
+  {
+    "pattern": "\\b666\\b",
+    "replacement": "awesome",
+    "description": "单独的数字666"
+  }
+]

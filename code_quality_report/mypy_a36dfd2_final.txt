@@ -1,0 +1,15 @@
+bv_utils.py:10: error: Library stubs not installed for "requests"  [import-untyped]
+audio_processor.py:9: error: Skipping analyzing "moviepy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+audio_processor.py:142: error: Skipping analyzing "pydub": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+video_downloader.py:13: error: Library stubs not installed for "yt_dlp"  [import-untyped]
+video_downloader.py:13: note: Hint: "python3 -m pip install types-yt-dlp"
+ai_services.py:11: error: Skipping analyzing "dashscope": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+ai_services.py:12: error: Library stubs not installed for "requests"  [import-untyped]
+ai_services.py:12: note: Hint: "python3 -m pip install types-requests"
+ai_services.py:12: note: (or run "mypy --install-types" to install all missing stub packages)
+ai_services.py:13: error: Skipping analyzing "pydub": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+ai_services.py:162: error: Skipping analyzing "oss2": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+ai_services.py:303: error: Skipping analyzing "dashscope.audio.asr": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+ai_services.py:303: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+Found 9 errors in 4 files (checked 23 source files)
+Exit code: 1
