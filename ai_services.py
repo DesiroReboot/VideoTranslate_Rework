@@ -40,6 +40,10 @@ from config import (
     ENABLE_ASR_SCORING,
     ASR_SCORING_RESULTS_DIR,
     MAX_RETRIES,
+    ENABLE_DISTRIBUTED_ASR,
+    DISTRIBUTED_ASR_NODE_COUNT,
+    DISTRIBUTED_ASR_COEFFICIENT_THRESHOLD,
+    DISTRIBUTED_ASR_ENABLE_QUALITY_EVAL,
 )
 from common.security import (
     SecurityError,
@@ -126,6 +130,20 @@ class AIServices:
             print("[初始化] ASR质量评分器已启用")
         else:
             print("[初始化] ASR质量评分器已禁用")
+
+        # 初始化分布式ASR共识机制
+        if ENABLE_DISTRIBUTED_ASR:
+            from common.consensus import DistributedASRConsensus
+
+            self.distributed_asr = DistributedASRConsensus(
+                node_count=DISTRIBUTED_ASR_NODE_COUNT,
+                coefficient_threshold=DISTRIBUTED_ASR_COEFFICIENT_THRESHOLD,
+                enable_quality_eval=DISTRIBUTED_ASR_ENABLE_QUALITY_EVAL,
+            )
+            print(f"[初始化] 分布式ASR共识机制已启用 ({DISTRIBUTED_ASR_NODE_COUNT}节点)")
+        else:
+            self.distributed_asr = None
+            print("[初始化] 分布式ASR共识机制已禁用")
 
     @staticmethod
     def _download_file(url: str, output_path: str) -> None:

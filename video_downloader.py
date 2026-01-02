@@ -10,12 +10,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 import yt_dlp
 
-# 配置标准输出使用 UTF-8 编码（解决 Windows GBK 编码问题）
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
-
 from config import YT_DLP_OPTIONS, TEMP_DIR
 from bv_utils import normalize_bilibili_url
 from common.security import (

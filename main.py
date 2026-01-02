@@ -24,6 +24,8 @@ from config import validate_config, OUTPUT_DIR
 from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
+from speech_to_text import SpeechToText
+from translate_text import DistributedTranslation
 from cleanup_temp import cleanup_temp_files
 from common.security import InputValidator, SecurityError, RegexValidator
 
@@ -52,6 +54,12 @@ class VideoTranslator:
 
         # 初始化AI服务
         self.ai_services = AIServices(translation_style)
+
+        # 初始化语音识别服务
+        self.stt = SpeechToText()
+
+        # 初始化分布式翻译服务
+        self.translator = DistributedTranslation(translation_style)
 
         print("\n" + "=" * 60)
         print("视频翻译系统 v1.1")
@@ -102,7 +110,7 @@ class VideoTranslator:
             # 步骤3: 语音识别
             print("\n[步骤 3/6] 语音识别(ASR)...")
             print("提示: 这可能需要几分钟,请耐心等待...")
-            original_text = self.ai_services.speech_to_text(original_audio)
+            original_text = self.stt.recognize(original_audio)
             print(f"✓ 识别完成,共 {len(original_text)} 字符")
 
             # 保存原文
@@ -117,9 +125,9 @@ class VideoTranslator:
             # 步骤4: 文本翻译
             print(f"\n[步骤 4/6] 翻译文本 (目标语言: {target_language})...")
 
-            # 使用带质量评价和重试的翻译方法
-            translated_text, translation_score = self.ai_services.translate_with_retry(
-                original_text, target_language, source_language
+            # 使用分布式翻译（带质量评价和重试）
+            translated_text, translation_score = self.translator.translate(
+                original_text, target_language
             )
 
             print(f"✓ 翻译完成,共 {len(translated_text)} 字符")

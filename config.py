@@ -183,6 +183,61 @@ ASR_ERROR_MAPPINGS = {
     # 可以添加更多ASR错误映射
 }
 
+# ============ 分布式ASR共识配置 ============
+
+# 是否启用分布式ASR共识机制
+ENABLE_DISTRIBUTED_ASR = True
+
+# 分布式ASR节点数量（建议3-5个）
+DISTRIBUTED_ASR_NODE_COUNT = 3
+
+# 分布式ASR相似度阈值
+DISTRIBUTED_ASR_COEFFICIENT_THRESHOLD = 0.95
+
+# 是否启用分布式ASR的质量评估
+DISTRIBUTED_ASR_ENABLE_QUALITY_EVAL = True
+
+
+# ============ 分布式翻译共识配置 ============
+
+# 是否启用分布式翻译共识机制
+ENABLE_DISTRIBUTED_TRANSLATION = True
+
+# 分布式翻译节点数量（固定为3个）
+DISTRIBUTED_TRANSLATION_NODE_COUNT = 3
+
+# 分布式翻译相似度阈值
+DISTRIBUTED_TRANSLATION_COEFFICIENT_THRESHOLD = 0.95
+
+# 分布式翻译模型配置
+# 使用3个不同模型进行翻译，通过共识算法选择最佳结果
+DISTRIBUTED_TRANSLATION_MODELS = [
+    {
+        "name": "qwen-max",
+        "provider": "dashscope",
+        "api_key": os.getenv("DASHSCOPE_API_KEY"),  # 使用现有的阿里云API Key
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-max",
+    },
+    {
+        "name": "deepseek-chat",
+        "provider": "deepseek",
+        "api_key": os.getenv("DEEPSEEK_API_KEY"),  # 需要配置环境变量
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+    },
+    {
+        "name": "glm-4.5-air",
+        "provider": "zhipu",
+        "api_key": os.getenv("ZHIPU_API_KEY"),  # 需要配置环境变量
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4-air",
+    },
+]
+
+# 如果某个模型的API Key未配置，将跳过该节点
+# 建议至少配置2个模型的API Key以确保共识机制正常运行
+
 
 def load_translation_prompt(target_language: str) -> str:
     """
