@@ -63,6 +63,9 @@ from scores.ASR.asr_scorer import AsrScorer, AsrScore
 class AIServices:
     """AI服务集成类"""
 
+    scorer: Optional["TranslationScorer"]
+    asr_scorer: Optional["AsrScorer"]
+
     def __init__(self, translation_style: str = "auto"):
         """初始化AI服务
 
@@ -109,19 +112,19 @@ class AIServices:
         self.mode_manager.set_mode(self.translation_style)
 
         # 初始化翻译质量评分器
+        self.scorer = None
         if ENABLE_TRANSLATION_SCORING:
             self.scorer = TranslationScorer()
             print("[初始化] 翻译质量评分器已启用")
         else:
-            self.scorer = None
             print("[初始化] 翻译质量评分器已禁用")
 
         # 初始化ASR质量评分器
+        self.asr_scorer = None
         if ENABLE_ASR_SCORING:
             self.asr_scorer = AsrScorer()
             print("[初始化] ASR质量评分器已启用")
         else:
-            self.asr_scorer = None
             print("[初始化] ASR质量评分器已禁用")
 
     @staticmethod

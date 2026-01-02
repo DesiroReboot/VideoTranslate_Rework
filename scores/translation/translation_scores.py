@@ -214,7 +214,7 @@ class TranslationScorer:  # pylint: disable=too-many-instance-attributes
             安全验证后的评分数据
         """
         try:
-            sanitized_data = {}
+            sanitized_data: Dict[str, Any] = {}
 
             # 处理数值字段
             numeric_fields = [

@@ -5,7 +5,7 @@
 为高频查询的字典项添加内存缓存，减少重复计算
 """
 
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Tuple
 from collections import OrderedDict
 from .interfaces import IDictionary
 
@@ -29,7 +29,7 @@ class CachedDictionary(IDictionary):
 
         self._dictionary = dictionary
         self._max_cache_size = max_cache_size
-        self._cache = OrderedDict()  # LRU缓存
+        self._cache: OrderedDict[Tuple[str, str, str], Any] = OrderedDict()  # LRU缓存
         self._hits = 0
         self._misses = 0
 

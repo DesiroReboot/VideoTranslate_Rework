@@ -14,6 +14,12 @@ import sys
 import time
 from pathlib import Path
 
+# 配置标准输出使用 UTF-8 编码（解决 Windows GBK 编码问题）
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 from config import validate_config, OUTPUT_DIR
 from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
