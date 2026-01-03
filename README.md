@@ -1,4 +1,4 @@
-# 视频翻译系统 v1.0
+# 视频翻译系统 v1.1
 
 一键翻译视频配音的自动化工具,支持B站视频URL和本地视频文件。
 
@@ -72,51 +72,58 @@ python main.py "https://www.bilibili.com/video/BVxxxxxxxxx" English
 # 翻译本地视频为日文 (自动风格)
 python main.py "video.mp4" Japanese
 
-# 指定源语言
-python main.py "video.mp4" English Chinese
+# 使用BV号直接翻译（大小写不敏感）
+python main.py BV17Lswz7Eoh Spanish humorous
 
-# 翻译B站视频为英文 (幽默风格)
-python main.py "https://www.bilibili.com/video/BVxxxxxxxxx" English humorous
-
-# 翻译教育视频为英文 (教育风格)
-python main.py "education_video.mp4" English educational
-
-# 翻译新闻视频为英文 (新闻风格)
-python main.py "news_video.mp4" English news
+# 参数支持大小写和别名
+python main.py "video.mp4" english serious      # 小写也可
+python main.py "video.mp4" ENGLISH SERIOUS      # 大写也可
+python main.py "video.mp4" es humor             # 使用语言代码和风格别名
 ```
+
+**参数说明**:
+- **视频URL/路径**: 支持B站链接、BV号、或本地视频文件路径
+- **目标语言**: 翻译成的目标语言（支持大小写、别名、语言代码）
+- **翻译风格**: 可选参数，指定翻译风格（支持大小写和别名）
 
 **翻译风格参数**: 第三个参数可选，指定翻译风格 (humorous, serious, educational, entertainment, news, auto)。默认为 auto (自动检测)。
 
+**大小写兼容性**: 所有参数（语言和风格）支持大小写不敏感输入，系统会自动标准化。
+
 ### 支持的语言
 
-主要语言:
-- `Chinese` - 中文
-- `English` - 英语
-- `Japanese` - 日语
-- `Korean` - 韩语
-- `Spanish` - 西班牙语
-- `French` - 法语
-- `German` - 德语
-- `Russian` - 俄语
-- `Italian` - 意大利语
-- `Portuguese` - 葡萄牙语
+主要语言（支持大小写和语言代码）:
+- `Chinese` / `chinese` / `zh` / `cn` - 中文
+- `English` / `english` / `en` / `eng` - 英语
+- `Japanese` / `japanese` / `ja` / `jp` - 日语
+- `Korean` / `korean` / `ko` / `kr` - 韩语
+- `Spanish` / `spanish` / `es` - 西班牙语
+- `French` / `french` / `fr` - 法语
+- `German` / `german` / `de` - 德语
+- `Russian` / `russian` / `ru` - 俄语
+- `Italian` / `italian` / `it` - 意大利语
+- `Portuguese` / `portuguese` / `pt` - 葡萄牙语
+
+**参数格式**: 支持完整名称（如 `English`）、小写形式（如 `english`）、语言代码（如 `en`）等多种输入方式，系统会自动标准化。
 
 更多语言请参考阿里云文档: https://help.aliyun.com/zh/model-studio/machine-translation
 
 ### 翻译模式
 
-系统提供6种翻译风格，适应不同类型视频内容：
+系统提供6种翻译风格，适应不同类型视频内容（支持大小写和别名）：
 
-| 风格 | 英文标识 | 适用场景 | 特点 |
-|------|----------|----------|------|
-| 幽默风格 | `humorous` | 搞笑、娱乐类视频 | 保留幽默感和轻松氛围，使用口语化表达 |
-| 正经风格 | `serious` | 教育、新闻、纪录片等严肃内容 | 注重准确性和专业性，使用正式表达 |
-| 教育风格 | `educational` | 教学、科普类视频 | 平衡准确性和易懂性，适合学习者 |
-| 娱乐风格 | `entertainment` | 综艺、访谈等娱乐内容 | 保持轻松活泼的氛围，富有表现力 |
-| 新闻风格 | `news` | 新闻报道、时事评论 | 注重客观性和时效性，使用标准新闻规范 |
-| 自动检测 | `auto` | 任意视频内容（默认） | 自动识别内容类型并选择最适合的风格 |
+| 风格 | 英文标识 | 常用别名 | 适用场景 | 特点 |
+|------|----------|----------|----------|------|
+| 幽默风格 | `humorous` | `humor`, `humour`, `funny` | 搞笑、娱乐类视频 | 保留幽默感和轻松氛围，使用口语化表达 |
+| 正经风格 | `serious` | `serios`, `series`, `formal` | 教育、新闻、纪录片等严肃内容 | 注重准确性和专业性，使用正式表达 |
+| 教育风格 | `educational` | `education`, `edu` | 教学、科普类视频 | 平衡准确性和易懂性，适合学习者 |
+| 娱乐风格 | `entertainment` | `entertain`, `fun` | 综艺、访谈等娱乐内容 | 保持轻松活泼的氛围，富有表现力 |
+| 新闻风格 | `news` | `new`, `paper` | 新闻报道、时事评论 | 注重客观性和时效性，使用标准新闻规范 |
+| 自动检测 | `auto` | `a`, `automatic` | 任意视频内容（默认） | 自动识别内容类型并选择最适合的风格 |
 
 **参数使用**: 在目标语言后添加翻译风格参数，例如 `python main.py "video.mp4" English serious`
+
+**大小写兼容**: 所有风格参数支持大小写不敏感输入和常用别名，系统会自动标准化为标准格式。
 
 **高级特性**:
 - **智能风格识别**: auto模式自动分析视频内容并选择最佳翻译策略
@@ -241,6 +248,14 @@ A:
 MIT License
 
 ## 更新日志
+
+### v1.1.0 (2025-01-03)
+- ✨ **新增**: 语言和风格参数大小写兼容功能
+- ✨ **新增**: 支持语言代码输入（如 `en`, `ja`, `ko` 等）
+- ✨ **新增**: 支持风格别名输入（如 `humor`, `edu`, `fun` 等）
+- ✨ **优化**: 参数验证逻辑，自动标准化用户输入
+- 📝 **文档**: 更新 README，添加参数格式说明和示例
+- 🐛 **修复**: 参数严格验证导致的大小写不匹配问题
 
 ### v1.0.0 (2025-12-10)
 - ✅ 初始版本发布
