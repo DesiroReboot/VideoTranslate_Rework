@@ -40,6 +40,137 @@ VALID_TRANSLATION_STYLES = [
 ]
 
 
+def normalize_style(style: str) -> str:
+    """
+    标准化翻译风格（大小写兼容）
+
+    Args:
+        style: 输入的风格名称
+
+    Returns:
+        标准化后的风格名称（小写）
+    """
+    if not isinstance(style, str):
+        return "auto"
+
+    # 转换为小写并匹配有效值
+    style_lower = style.lower()
+
+    # 精确匹配
+    if style_lower in VALID_TRANSLATION_STYLES:
+        return style_lower
+
+    # 模糊匹配
+    style_map = {
+        "humor": "humorous",
+        "humour": "humorous",
+        "funny": "humorous",
+        "serios": "serious",
+        "series": "serious",
+        "formal": "serious",
+        "education": "educational",
+        "edu": "educational",
+        "entertain": "entertainment",
+        "fun": "entertainment",
+        "new": "news",
+        "paper": "news",
+        "a": "auto",
+        "automatic": "auto",
+    }
+
+    if style_lower in style_map:
+        return style_map[style_lower]
+
+    # 无法匹配，返回默认值
+    print(f"[警告] 无法识别的风格 '{style}'，使用默认风格 'auto'")
+    return "auto"
+
+
+def normalize_language(language: str) -> str:
+    """
+    标准化语言名称（大小写兼容）
+
+    Args:
+        language: 输入的语言名称
+
+    Returns:
+        标准化后的语言名称（首字母大写）
+    """
+    if not isinstance(language, str):
+        return "English"
+
+    # 去除首尾空格
+    language = language.strip()
+
+    # 常见语言的别名映射（小写）
+    language_map = {
+        # 英语
+        "english": "English",
+        "en": "English",
+        "eng": "English",
+
+        # 日语
+        "japanese": "Japanese",
+        "ja": "Japanese",
+        "jp": "Japanese",
+
+        # 韩语
+        "korean": "Korean",
+        "ko": "Korean",
+        "kr": "Korean",
+
+        # 法语
+        "french": "French",
+        "fr": "French",
+
+        # 德语
+        "german": "German",
+        "de": "German",
+
+        # 西班牙语
+        "spanish": "Spanish",
+        "es": "Spanish",
+
+        # 俄语
+        "russian": "Russian",
+        "ru": "Russian",
+
+        # 意大利语
+        "italian": "Italian",
+        "it": "Italian",
+
+        # 葡萄牙语
+        "portuguese": "Portuguese",
+        "pt": "Portuguese",
+
+        # 中文
+        "chinese": "Chinese",
+        "zh": "Chinese",
+        "cn": "Chinese",
+    }
+
+    language_lower = language.lower()
+
+    # 直接匹配（首字母大写）
+    if language[0].isupper() and language in ["English", "Japanese", "Korean", "French",
+                                                   "German", "Spanish", "Russian", "Italian",
+                                                   "Portuguese", "Chinese"]:
+        return language
+
+    # 查找映射
+    if language_lower in language_map:
+        return language_map[language_lower]
+
+    # 如果已经是正确格式，直接返回
+    if language in ["English", "Japanese", "Korean", "French", "German",
+                    "Spanish", "Russian", "Italian", "Portuguese", "Chinese"]:
+        return language
+
+    # 无法识别，返回默认值
+    print(f"[警告] 无法识别的语言 '{language}'，使用默认语言 'English'")
+    return "English"
+
+
 class VideoTranslator:
     """视频翻译器主类"""
 
@@ -49,17 +180,22 @@ class VideoTranslator:
         Args:
             translation_style: 翻译风格，可选值：humorous, serious, educational, entertainment, news, auto
         """
+        # 标准化翻译风格（大小写兼容）
+        normalized_style = normalize_style(translation_style)
+        if normalized_style != translation_style:
+            print(f"[提示] 风格 '{translation_style}' 已标准化为 '{normalized_style}'")
+
         # 验证配置
         validate_config()
 
         # 初始化AI服务
-        self.ai_services = AIServices(translation_style)
+        self.ai_services = AIServices(normalized_style)
 
         # 初始化语音识别服务
         self.stt = SpeechToText()
 
         # 初始化分布式翻译服务
-        self.translator = DistributedTranslation(translation_style)
+        self.translator = DistributedTranslation(normalized_style)
 
         print("\n" + "=" * 60)
         print("视频翻译系统 v1.1")
@@ -91,6 +227,12 @@ class VideoTranslator:
         Raises:
             Exception: 处理过程中的任何错误
         """
+        # 标准化目标语言（大小写兼容）
+        normalized_language = normalize_language(target_language)
+        if normalized_language != target_language:
+            print(f"[提示] 语言 '{target_language}' 已标准化为 '{normalized_language}'")
+        target_language = normalized_language
+
         start_time = time.time()
 
         try:
@@ -304,15 +446,12 @@ def main():
         # 4. URL/路径长度验证
         url_or_path = InputValidator.validate_url_length(url_or_path, max_length=1000)
 
-        # 5. 语言参数验证
-        target_language = InputValidator.validate_language(target_language)
+        # 5. 语言参数标准化（大小写兼容）
+        target_language = normalize_language(target_language)
         # source_language 固定为 "auto"，无需验证
 
-        # 6. 翻译风格参数验证
-        if translation_style not in VALID_TRANSLATION_STYLES:
-            raise ValueError(
-                f"无效的翻译风格: {translation_style}。可选值: {', '.join(VALID_TRANSLATION_STYLES)}"
-            )
+        # 6. 翻译风格参数标准化（大小写兼容）
+        translation_style = normalize_style(translation_style)
 
         # 7. 正则表达式输入长度验证（防止ReDoS）
         RegexValidator.validate_input_length_for_regex(url_or_path, max_length=500)
