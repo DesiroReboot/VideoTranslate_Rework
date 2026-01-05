@@ -92,6 +92,21 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
 
 # ==================== 下载配置 ====================
+# 直链下载配置
+# 允许直链下载的域名白名单（安全控制）
+DIRECT_DOWNLOAD_ALLOWED_DOMAINS = [
+    # 示例可信域名（请根据实际需求修改）
+    # "your-cdn.com",
+    # "your-storage.s3.amazonaws.com",
+    # "your-oss.oss-cn-hangzhou.aliyuncs.com",
+]
+
+# 直链下载文件大小限制（字节）
+DIRECT_DOWNLOAD_MAX_SIZE = 500 * 1024 * 1024  # 默认500MB
+
+# 直链下载超时时间（秒）
+DIRECT_DOWNLOAD_TIMEOUT = 300  # 默认5分钟
+
 # yt-dlp下载参数
 YT_DLP_OPTIONS = {
     # 修复HTTP 412 - 使用更通用的格式选择

@@ -396,6 +396,71 @@ class URLValidator:
 
         return short_url
 
+    @staticmethod
+    def validate_direct_download_url(url: str, allowed_domains: List[str]) -> str:
+        """
+        验证直链下载URL（防止SSRF攻击）
+
+        Args:
+            url: 直链URL
+            allowed_domains: 允许的域名白名单
+
+        Returns:
+            验证后的URL
+
+        Raises:
+            SecurityError: URL不在白名单中或格式不合法
+        """
+        if not url or not isinstance(url, str):
+            raise SecurityError("URL不能为空")
+
+        # 去除首尾空格
+        url = url.strip()
+
+        # 验证URL格式
+        if not url.startswith(("http://", "https://")):
+            raise SecurityError(f"URL必须以http://或https://开头: {url}")
+
+        # 验证域名在白名单中
+        if not allowed_domains:
+            raise SecurityError("直链下载域名白名单未配置，请联系管理员")
+
+        domain_found = False
+        for domain in allowed_domains:
+            if domain in url:
+                domain_found = True
+                break
+
+        if not domain_found:
+            raise SecurityError(
+                f"URL域名不在白名单中: {url}\n"
+                f"允许的域名: {', '.join(allowed_domains)}\n"
+                f"如需添加新域名，请联系管理员"
+            )
+
+        # 防止访问内网地址
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+
+        # 禁止访问localhost和内网IP
+        forbidden_patterns = [
+            "localhost",
+            "127.",
+            "192.168.",
+            "10.",
+            "172.16.",
+            "0.0.0.0",
+            "::1",
+        ]
+
+        for pattern in forbidden_patterns:
+            if pattern in hostname:
+                raise SecurityError(f"禁止访问内网地址: {hostname}")
+
+        return url
+
 
 # ==================== 正则表达式验证器 ====================
 

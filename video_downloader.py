@@ -1,16 +1,24 @@
 """
 视频下载模块
-支持B站视频URL下载和本地文件处理
+支持B站视频URL下载、直链下载和本地文件处理
 """
 
 import os
 import sys
 import re
+import hashlib
 from pathlib import Path
 from typing import Optional, Tuple
 import yt_dlp
+import requests
 
-from config import YT_DLP_OPTIONS, TEMP_DIR
+from config import (
+    YT_DLP_OPTIONS,
+    TEMP_DIR,
+    DIRECT_DOWNLOAD_ALLOWED_DOMAINS,
+    DIRECT_DOWNLOAD_MAX_SIZE,
+    DIRECT_DOWNLOAD_TIMEOUT,
+)
 from bv_utils import normalize_bilibili_url
 from common.security import (
     PathSecurityValidator,
@@ -45,6 +53,46 @@ class VideoDownloader:
         for pattern in VideoDownloader.BILIBILI_PATTERNS:
             if re.match(pattern, url):
                 return True
+        return False
+
+    @staticmethod
+    def is_direct_download_url(url: str) -> bool:
+        """
+        检查是否为直链下载URL
+
+        Args:
+            url: 待检查的URL字符串
+
+        Returns:
+            是否为直链URL
+        """
+        if not url or not isinstance(url, str):
+            return False
+
+        # 必须是http/https开头
+        if not url.startswith(("http://", "https://")):
+            return False
+
+        # 排除B站URL（B站URL由download_bilibili_video处理）
+        if VideoDownloader.is_bilibili_url(url):
+            return False
+
+        # 检查URL是否包含常见的视频文件扩展名
+        video_extensions = [
+            ".mp4", ".avi", ".mov", ".mkv", ".flv",
+            ".wmv", ".webm", ".m4v", ".mp3", ".wav"
+        ]
+        url_lower = url.lower()
+        for ext in video_extensions:
+            if ext in url_lower:
+                return True
+
+        # 如果配置了域名白名单，检查是否包含白名单域名
+        if DIRECT_DOWNLOAD_ALLOWED_DOMAINS:
+            for domain in DIRECT_DOWNLOAD_ALLOWED_DOMAINS:
+                if domain in url:
+                    return True
+
         return False
 
     @staticmethod
@@ -175,24 +223,141 @@ class VideoDownloader:
                 return downloaded_file, bv_id
 
         except Exception as e:
-            print(f"✗ 下载失败: {str(e)}")
-            raise ValueError(f"下载B站视频失败: {str(e)}")
+            error_msg = f"B站视频下载失败: {str(e)}\n\n"
+            error_msg += "建议解决方案:\n"
+            error_msg += "1. 检查网络连接是否正常\n"
+            error_msg += "2. 确认视频链接是否有效（尝试在浏览器中打开）\n"
+            error_msg += "3. 如果B站视频无法下载，可以:\n"
+            error_msg += "   - 使用其他B站视频链接\n"
+            error_msg += "   - 将视频上传到可信存储后使用直链下载\n"
+            error_msg += "   - 联系管理员获取其他视频来源支持\n"
+            error_msg += f"4. 技术详情: {type(e).__name__}"
+            raise ValueError(error_msg)
+
+    @staticmethod
+    def download_direct_url(url: str) -> Tuple[str, None]:
+        """
+        从直链URL下载视频
+
+        Args:
+            url: 直链URL
+
+        Returns:
+            (下载后的视频文件路径, None) 的元组
+
+        Raises:
+            ValueError: URL无效或下载失败
+            SecurityError: 安全检查失败
+        """
+        # 1. URL参数验证
+        if not url or not isinstance(url, str):
+            raise ValueError("URL参数无效")
+
+        # 2. URL安全验证
+        try:
+            validated_url = URLValidator.validate_direct_download_url(
+                url, DIRECT_DOWNLOAD_ALLOWED_DOMAINS
+            )
+        except SecurityError as e:
+            raise ValueError(f"直链URL安全验证失败: {str(e)}")
+
+        print(f"开始下载直链视频: {validated_url}")
+
+        # 3. 生成文件名（使用URL的哈希值）
+        url_hash = hashlib.md5(validated_url.encode()).hexdigest()[:12]
+        filename = f"direct_{url_hash}.mp4"
+        output_path = TEMP_DIR / filename
+
+        # 4. 检查是否已存在（复用机制）
+        if output_path.exists():
+            file_size = output_path.stat().st_size
+            if file_size > 0:
+                print(f"✓ 检测到已下载的视频，直接复用: {output_path}")
+                return str(output_path), None
+
+        # 5. 下载文件
+        try:
+            # 流式下载，支持大文件
+            response = requests.get(
+                validated_url,
+                stream=True,
+                timeout=DIRECT_DOWNLOAD_TIMEOUT,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                }
+            )
+
+            # 检查响应状态
+            response.raise_for_status()
+
+            # 获取文件大小
+            content_length = response.headers.get("content-length")
+            if content_length:
+                content_length = int(content_length)
+                if content_length > DIRECT_DOWNLOAD_MAX_SIZE:
+                    raise ValueError(
+                        f"文件过大: {content_length / 1024 / 1024:.2f}MB "
+                        f"(限制: {DIRECT_DOWNLOAD_MAX_SIZE / 1024 / 1024:.0f}MB)"
+                    )
+
+            # 写入文件
+            downloaded_size = 0
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+
+                        # 实时检查文件大小
+                        if downloaded_size > DIRECT_DOWNLOAD_MAX_SIZE:
+                            output_path.unlink()  # 删除已下载的部分文件
+                            raise ValueError(
+                                f"下载过程中文件超过大小限制: "
+                                f"{downloaded_size / 1024 / 1024:.2f}MB"
+                            )
+
+            print(f"✓ 直链视频下载完成: {output_path} ({downloaded_size / 1024 / 1024:.2f}MB)")
+            return str(output_path), None
+
+        except requests.exceptions.RequestException as e:
+            # 清理可能的部分下载文件
+            if output_path.exists():
+                output_path.unlink()
+
+            error_msg = f"直链视频下载失败: {str(e)}\n\n"
+            error_msg += "建议解决方案:\n"
+            error_msg += "1. 检查URL是否有效（尝试在浏览器中打开）\n"
+            error_msg += "2. 确认URL域名在白名单中\n"
+            error_msg += "3. 检查网络连接是否正常\n"
+            error_msg += "4. 联系管理员添加新的域名到白名单\n"
+            error_msg += f"5. 技术详情: {type(e).__name__}"
+            raise ValueError(error_msg)
+
+        except Exception as e:
+            # 清理可能的部分下载文件
+            if output_path.exists():
+                output_path.unlink()
+            raise ValueError(f"下载直链视频时发生错误: {str(e)}")
+
 
     @staticmethod
     def prepare_video(url_or_path: str) -> Tuple[str, Optional[str]]:
         """
-        准备视频文件（仅支持从B站下载）
+        准备视频文件（支持B站URL和直链下载）
 
         Args:
-            url_or_path: B站URL或BV号
+            url_or_path: B站URL、BV号或直链URL
 
         Returns:
-            (可用的视频文件路径, BV号) 的元组
+            (可用的视频文件路径, BV号) 的元组，直链下载BV号为None
 
         Raises:
             ValueError: 输入无效
         """
-        # 判断是否为B站URL
+        # 1. 判断是否为B站URL
         if VideoDownloader.is_bilibili_url(url_or_path):
             # 检查是否为纯BV号，如果是则转换为完整URL
             if re.match(r"^[Bb][Vv][\w]+$", url_or_path):
@@ -201,16 +366,33 @@ class VideoDownloader:
                 return VideoDownloader.download_bilibili_video(full_url)
             else:
                 return VideoDownloader.download_bilibili_video(url_or_path)
+
+        # 2. 判断是否为直链URL
+        elif VideoDownloader.is_direct_download_url(url_or_path):
+            print(f"检测到直链URL，开始下载...")
+            return VideoDownloader.download_direct_url(url_or_path)
+
+        # 3. 无效输入
         else:
-            raise ValueError(
-                f"无效的输入: {url_or_path}\n"
-                "请提供B站视频URL，支持以下格式:\n"
-                "1. 完整URL: https://www.bilibili.com/video/BVxxxxxx\n"
-                "2. BV号: BVxxxxxx\n"
-                "3. AV号: av123456\n"
-                "4. 短链: https://b23.tv/xxxxxx\n\n"
-                "注意：暂时不支持本地上传功能"
-            )
+            error_msg = f"无效的输入: {url_or_path}\n\n"
+            error_msg += "支持的输入格式:\n\n"
+
+            error_msg += "1. B站视频URL:\n"
+            error_msg += "   - 完整URL: https://www.bilibili.com/video/BVxxxxxx\n"
+            error_msg += "   - BV号: BVxxxxxx\n"
+            error_msg += "   - AV号: av123456\n"
+            error_msg += "   - 短链: https://b23.tv/xxxxxx\n\n"
+
+            if DIRECT_DOWNLOAD_ALLOWED_DOMAINS:
+                error_msg += "2. 直链下载URL:\n"
+                error_msg += f"   - 可信域名: {', '.join(DIRECT_DOWNLOAD_ALLOWED_DOMAINS)}\n"
+                error_msg += f"   - 文件大小限制: {DIRECT_DOWNLOAD_MAX_SIZE / 1024 / 1024:.0f}MB\n\n"
+            else:
+                error_msg += "2. 直链下载: 当前未配置可信域名白名单\n"
+                error_msg += "   如需使用直链下载，请联系管理员配置\n\n"
+
+            error_msg += "注意: 本地上传功能已暂时禁用"
+            raise ValueError(error_msg)
 
 
 # 测试代码
