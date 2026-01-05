@@ -181,18 +181,18 @@ class VideoDownloader:
     @staticmethod
     def prepare_video(url_or_path: str) -> Tuple[str, Optional[str]]:
         """
-        准备视频文件（下载或验证本地文件）
+        准备视频文件（仅支持从B站下载）
 
         Args:
-            url_or_path: B站URL或本地文件路径
+            url_or_path: B站URL或BV号
 
         Returns:
-            (可用的视频文件路径, BV号) 的元组，本地文件BV号为None
+            (可用的视频文件路径, BV号) 的元组
 
         Raises:
             ValueError: 输入无效
         """
-        # 判断是URL还是本地文件
+        # 判断是否为B站URL
         if VideoDownloader.is_bilibili_url(url_or_path):
             # 检查是否为纯BV号，如果是则转换为完整URL
             if re.match(r"^[Bb][Vv][\w]+$", url_or_path):
@@ -201,18 +201,15 @@ class VideoDownloader:
                 return VideoDownloader.download_bilibili_video(full_url)
             else:
                 return VideoDownloader.download_bilibili_video(url_or_path)
-
-        elif VideoDownloader.is_local_file(url_or_path):
-            # 本地文件，直接返回
-            print(f"✓ 使用本地视频文件: {url_or_path}")
-            return str(Path(url_or_path).absolute()), None
-
         else:
             raise ValueError(
                 f"无效的输入: {url_or_path}\n"
-                "请提供:\n"
-                "1. B站视频URL (支持BV号、AV号、b23.tv短链)\n"
-                "2. 本地视频文件路径 (支持格式: .mp4, .avi, .mov, .mkv)"
+                "请提供B站视频URL，支持以下格式:\n"
+                "1. 完整URL: https://www.bilibili.com/video/BVxxxxxx\n"
+                "2. BV号: BVxxxxxx\n"
+                "3. AV号: av123456\n"
+                "4. 短链: https://b23.tv/xxxxxx\n\n"
+                "注意：暂时不支持本地上传功能"
             )
 
 
