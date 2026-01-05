@@ -69,6 +69,7 @@ class AIServices:
 
     scorer: Optional["TranslationScorer"]
     asr_scorer: Optional["AsrScorer"]
+    distributed_asr: Optional["DistributedASRConsensus"]  # type: ignore[name-defined]
 
     def __init__(self, translation_style: str = "auto"):
         """初始化AI服务
@@ -207,16 +208,33 @@ class AIServices:
 
         # 验证环境变量是否设置
         required_vars = {
-            "ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
-            "ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
+            "OSS_ACCESS_KEY_ID": OSS_ACCESS_KEY_ID,
+            "OSS_ACCESS_KEY_SECRET": OSS_ACCESS_KEY_SECRET,
             "OSS_BUCKET_NAME": OSS_BUCKET_NAME,
         }
         missing_vars = [name for name, value in required_vars.items() if not value]
 
         if missing_vars:
-            raise ValueError(
-                f"Missing required OSS environment variables: {', '.join(missing_vars)}"
-            )
+            import sys
+            error_msg = f"\n{'='*60}\n"
+            error_msg += f"错误: OSS功能需要设置以下环境变量:\n"
+            for var in missing_vars:
+                error_msg += f"  - {var}\n"
+            error_msg += f"\n"
+
+            if sys.platform == "win32":
+                error_msg += f"Windows 设置方式:\n"
+                for var in missing_vars:
+                    error_msg += f"  setx {var} \"your_value_here\"\n"
+            else:
+                error_msg += f"Linux/Mac 设置方式:\n"
+                error_msg += f"  在 ~/.bashrc 或 ~/.zshrc 中添加:\n"
+                for var in missing_vars:
+                    error_msg += f"  export {var}=your_value_here\n"
+
+            error_msg += f"\n设置后需要重启终端或应用程序\n"
+            error_msg += f"{'='*60}\n"
+            raise ValueError(error_msg)
 
         # 初始化OSS客户端
         try:

@@ -635,3 +635,47 @@ class ResourceValidator:
             raise ValueError("超时时间必须大于0")
 
         return timeout
+
+
+# ==================== 环境配置验证器 ====================
+
+
+class EnvConfigValidator:
+    """环境配置验证器 - 验证环境变量和配置"""
+
+    @staticmethod
+    def get_required_env(key: str) -> str:
+        """
+        获取必需的环境变量，如果未设置则提供详细的错误提示
+
+        Args:
+            key: 环境变量名称
+
+        Returns:
+            环境变量的值
+
+        Raises:
+            ValueError: 环境变量未设置
+        """
+        value = os.getenv(key)
+        if not value:
+            import sys
+
+            error_msg = f"\n{'='*60}\n"
+            error_msg += f"错误: 必须设置环境变量 '{key}'\n\n"
+
+            # 根据操作系统提供不同的设置命令
+            if sys.platform == "win32":
+                error_msg += f"Windows 设置方式:\n"
+                error_msg += f"  临时设置: set {key}=your_value_here\n"
+                error_msg += f"  永久设置: setx {key} \"your_value_here\"\n"
+            else:
+                error_msg += f"Linux/Mac 设置方式:\n"
+                error_msg += f"  临时设置: export {key}=your_value_here\n"
+                error_msg += f"  永久设置: 在 ~/.bashrc 或 ~/.zshrc 中添加:\n"
+                error_msg += f"            export {key}=your_value_here\n"
+
+            error_msg += f"\n设置后需要重启终端或应用程序\n"
+            error_msg += f"{'='*60}\n"
+            raise ValueError(error_msg)
+        return value

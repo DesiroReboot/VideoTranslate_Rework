@@ -306,9 +306,12 @@ class DistributedTranslation:
             coefficient = 1.0  # 单个结果默认为完全一致
 
         # 4. 使用 TranslationScorer 选择最佳结果
+        selected_result: TranslationResult
+        selected_score: TranslationScore | None
+
         if len(remaining_results) == 2:
             # 对两个结果进行评分
-            scores = []
+            scores: list[tuple[TranslationResult, TranslationScore | None]] = []
             for result in remaining_results:
                 try:
                     score = self.scorer.score_translation(

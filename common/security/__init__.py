@@ -17,6 +17,7 @@ from .validators import (
     RegexValidator,
     LLMOutputValidator,
     ResourceValidator,
+    EnvConfigValidator,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "RegexValidator",
     "LLMOutputValidator",
     "ResourceValidator",
+    "EnvConfigValidator",
 ]

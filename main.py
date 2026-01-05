@@ -20,7 +20,7 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-from config import validate_config, OUTPUT_DIR
+from config import OUTPUT_DIR
 from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor
 from ai_services import AIServices
@@ -184,9 +184,6 @@ class VideoTranslator:
         normalized_style = normalize_style(translation_style)
         if normalized_style != translation_style:
             print(f"[提示] 风格 '{translation_style}' 已标准化为 '{normalized_style}'")
-
-        # 验证配置
-        validate_config()
 
         # 初始化AI服务
         self.ai_services = AIServices(normalized_style)

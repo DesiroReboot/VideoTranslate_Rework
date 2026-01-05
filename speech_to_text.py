@@ -241,7 +241,41 @@ class SpeechToText:
 
         Returns:
             (OSS签名URL, 对象名称)
+
+        Raises:
+            ValueError: OSS配置未设置或不完整
         """
+        # 验证OSS配置
+        if not OSS_ACCESS_KEY_ID or not OSS_ACCESS_KEY_SECRET or not OSS_BUCKET_NAME:
+            missing_vars = []
+            if not OSS_ACCESS_KEY_ID:
+                missing_vars.append("OSS_ACCESS_KEY_ID")
+            if not OSS_ACCESS_KEY_SECRET:
+                missing_vars.append("OSS_ACCESS_KEY_SECRET")
+            if not OSS_BUCKET_NAME:
+                missing_vars.append("OSS_BUCKET_NAME")
+
+            import sys
+            error_msg = f"\n{'='*60}\n"
+            error_msg += f"错误: OSS功能需要设置以下环境变量:\n"
+            for var in missing_vars:
+                error_msg += f"  - {var}\n"
+            error_msg += f"\n"
+
+            if sys.platform == "win32":
+                error_msg += f"Windows 设置方式:\n"
+                for var in missing_vars:
+                    error_msg += f"  setx {var} \"your_value_here\"\n"
+            else:
+                error_msg += f"Linux/Mac 设置方式:\n"
+                error_msg += f"  在 ~/.bashrc 或 ~/.zshrc 中添加:\n"
+                for var in missing_vars:
+                    error_msg += f"  export {var}=your_value_here\n"
+
+            error_msg += f"\n设置后需要重启终端或应用程序\n"
+            error_msg += f"{'='*60}\n"
+            raise ValueError(error_msg)
+
         # 创建OSS客户端
         auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
         bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
@@ -285,6 +319,11 @@ class SpeechToText:
         """
         if not OSS_AUTO_CLEANUP:
             print(f"[OSS] 自动清理已禁用，保留文件: {object_name}")
+            return
+
+        # 验证OSS配置（清理时如果配置缺失，静默失败）
+        if not OSS_ACCESS_KEY_ID or not OSS_ACCESS_KEY_SECRET or not OSS_BUCKET_NAME:
+            print(f"[OSS] 警告: OSS配置不完整，无法清理文件: {object_name}")
             return
 
         try:
@@ -472,6 +511,9 @@ class SpeechToText:
         Returns:
             识别的文本内容
         """
+        if self.distributed_asr is None:
+            raise RuntimeError("分布式ASR未初始化，请检查ENABLE_DISTRIBUTED_ASR配置")
+
         print(f"\n[分布式ASR] 启动{self.distributed_asr.node_count}个节点进行识别...")
 
         # 定义ASR函数
@@ -515,6 +557,9 @@ class SpeechToText:
         Returns:
             可能经过校正的文本
         """
+        if self.asr_scorer is None:
+            return text
+
         print("[ASR] 开始质量评分和校正...")
         original_text = text
         score_result = self.asr_scorer.score_asr_result(original_text)

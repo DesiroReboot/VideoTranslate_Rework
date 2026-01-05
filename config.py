@@ -94,7 +94,7 @@ BILIBILI_COOKIE_FILE = PROJECT_ROOT / "bilibili_cookies.txt"
 # ==================== 下载配置 ====================
 # 直链下载配置
 # 允许直链下载的域名白名单（安全控制）
-DIRECT_DOWNLOAD_ALLOWED_DOMAINS = [
+DIRECT_DOWNLOAD_ALLOWED_DOMAINS: list[str] = [
     # 示例可信域名（请根据实际需求修改）
     # "your-cdn.com",
     # "your-storage.s3.amazonaws.com",
@@ -177,10 +177,6 @@ AUDIO_FORMAT = "mp3"
 # 视频编码参数
 VIDEO_CODEC = "libx264"
 AUDIO_CODEC = "aac"
-
-# ==================== 翻译参数配置 ====================
-# 从Prompt_Video_Translate.txt读取系统提示词
-TRANSLATION_SYSTEM_PROMPT_FILE = PROJECT_ROOT / "Prompt_Video_Translate.txt"
 
 # ==================== 翻译质量评分配置 ====================
 # 评分使用的模型
@@ -298,35 +294,3 @@ DISTRIBUTED_TRANSLATION_MODELS = [
 
 # 如果某个模型的API Key未配置，将跳过该节点
 # 建议至少配置2个模型的API Key以确保共识机制正常运行
-
-
-def load_translation_prompt(target_language: str) -> str:
-    """
-    加载翻译系统提示词并替换目标语言
-
-    Args:
-        target_language: 目标语言
-
-    Returns:
-        格式化后的系统提示词
-    """
-    if TRANSLATION_SYSTEM_PROMPT_FILE.exists():
-        content = TRANSLATION_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
-        return content.replace("{target_language}", target_language)
-    else:
-        return f"You are a professional translator. Translate the following text to {target_language}."
-
-
-# ==================== 验证函数 ====================
-def validate_config():
-    """验证配置是否正确"""
-    if not DASHSCOPE_API_KEY:
-        raise ValueError(
-            "未配置DASHSCOPE_API_KEY!\n"
-            '请在环境变量中设置: setx DASHSCOPE_API_KEY "your_api_key_here"'
-        )
-
-    if not TRANSLATION_SYSTEM_PROMPT_FILE.exists():
-        print(f"警告: 未找到翻译提示词文件 {TRANSLATION_SYSTEM_PROMPT_FILE}")
-
-    return True

@@ -72,7 +72,7 @@ class TextQualityEvaluator:
             score += max(0, 10 - (length - 2000) / 200)
 
         # 2. 字符多样性 - 熵 (40分)
-        char_freq = {}
+        char_freq: dict[str, int] = {}
         for char in text:
             char_freq[char] = char_freq.get(char, 0) + 1
 
@@ -234,8 +234,8 @@ class DistributedASRConsensus:
             return remaining_results[0]
 
         # 计算综合分数（可信度权重0.6，质量权重0.4）
-        best_result = None
-        best_score = -1
+        best_result: Optional[ASRResult] = None
+        best_score = -1.0
 
         for result in remaining_results:
             confidence = confidence_scores.get(result.node_id, 0.0)
@@ -252,6 +252,9 @@ class DistributedASRConsensus:
             if combined_score > best_score:
                 best_score = combined_score
                 best_result = result
+
+        if best_result is None:
+            raise ValueError("未能选择最佳ASR结果")
 
         return best_result
 

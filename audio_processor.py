@@ -120,7 +120,10 @@ class AudioProcessor:
         print(f"视频: {video_path}")
         print(f"新音频: {new_audio_path}")
 
-        # 初始化临时音频路径变量
+        # 初始化资源变量
+        video = None
+        new_audio = None
+        final_video = None
         temp_audio_path = None
 
         try:
@@ -190,11 +193,6 @@ class AudioProcessor:
                 logger=None,
             )
 
-            # 关闭所有文件
-            video.close()
-            new_audio.close()
-            final_video.close()
-
             print(f"视频生成完成: {output_video_path}")
             return output_video_path
 
@@ -202,6 +200,25 @@ class AudioProcessor:
             raise Exception(f"音频替换失败: {str(e)}")
 
         finally:
+            # 确保所有资源都被正确关闭
+            if final_video is not None:
+                try:
+                    final_video.close()
+                except Exception:
+                    pass
+
+            if new_audio is not None:
+                try:
+                    new_audio.close()
+                except Exception:
+                    pass
+
+            if video is not None:
+                try:
+                    video.close()
+                except Exception:
+                    pass
+
             # 清理临时音频文件
             if temp_audio_path is not None:
                 # 处理可能的元组格式（fd, path）
@@ -211,8 +228,11 @@ class AudioProcessor:
                 else:
                     audio_path = temp_audio_path
 
-                if Path(audio_path).exists():
-                    Path(audio_path).unlink()
+                try:
+                    if Path(audio_path).exists():
+                        Path(audio_path).unlink()
+                except Exception:
+                    pass
 
     @staticmethod
     def get_audio_duration(audio_path: str) -> float:
