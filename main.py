@@ -20,6 +20,25 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
+# 强制禁用缓冲区，实现实时输出
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+# 配置日志系统 - 实时输出到终端
+from common.logger import setup_logger, log_message
+
+# 初始化日志系统
+logger = setup_logger(
+    name="VideoTranslate",
+    level="INFO",
+    log_file="video_translate.log",
+)
+
+# 使用log_message替代print进行格式化输出
+def print_status(message: str):
+    """打印状态消息（兼容旧代码）"""
+    print(message)
+
 from config import OUTPUT_DIR
 from video_downloader import VideoDownloader
 from audio_processor import AudioProcessor

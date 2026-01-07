@@ -16,6 +16,14 @@ DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 # if not DASHSCOPE_API_KEY:
 #     raise ValueError("未设置DASHSCOPE_API_KEY环境变量")
 
+# 智谱AI API Key (用于分布式翻译的glm-4.5-air模型)
+# Windows设置方式: setx ZHIPU_API_KEY "your_api_key_here"
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY")
+
+# DeepSeek API Key (用于分布式翻译的deepseek-chat模型)
+# Windows设置方式: setx DEEPSEEK_API_KEY "your_api_key_here"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
 # 阿里云API基础URL (北京地域)
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 
