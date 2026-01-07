@@ -13,9 +13,16 @@ from common.dictionary.dictionary_config import config as dictionary_config
 # 阿里云API Key - 请在环境变量中配置 DASHSCOPE_API_KEY
 # Windows设置方式: setx DASHSCOPE_API_KEY "your_api_key_here"
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+# if not DASHSCOPE_API_KEY:
+#     raise ValueError("未设置DASHSCOPE_API_KEY环境变量")
 
 # 阿里云API基础URL (北京地域)
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
+
+# OSS配置验证
+OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID")
+OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET") 
+OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME")
 
 # ==================== 模型配置 ====================
 # 语音识别模型 (ASR) - 使用Fun-ASR支持文件URL识别
@@ -41,9 +48,6 @@ TTS_MODEL = "qwen3-tts-flash"  # 49种音色,支持多语言
 
 # OSS
 OSS_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com"
-OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID")
-OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET")
-OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME")
 
 # OSS安全加固配置
 # 是否启用UUID文件名混淆（默认启用）
@@ -272,7 +276,7 @@ DISTRIBUTED_TRANSLATION_MODELS = [
     {
         "name": "qwen-max",
         "provider": "dashscope",
-        "api_key": os.getenv("DASHSCOPE_API_KEY"),  # 使用现有的阿里云API Key
+        "api_key": DASHSCOPE_API_KEY,  # 使用现有的阿里云API Key
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "model": "qwen-max",
     },

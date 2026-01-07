@@ -306,7 +306,7 @@ class AsrScorer:
             if error_text in text:
                 # 检查上下文是否匹配
                 should_correct = self._check_context_match(
-                    text, context, list(mapping.get("context_keywords", []))
+                    text, context, mapping.get("context_keywords", [])
                 )
 
                 if should_correct:
