@@ -48,15 +48,24 @@ from common.security import (
 )
 from scores.ASR.asr_scorer import AsrScorer, AsrScore
 from common.consensus import DistributedASRConsensus
+from common.stop_flag import StopFlagHolder
 import oss2
 import dashscope
 
 
-class SpeechToText:
-    """语音识别服务类"""
+class SpeechToText(StopFlagHolder):
+    """语音识别服务类（支持停止标志）"""
 
-    def __init__(self):
-        """初始化语音识别服务"""
+    def __init__(self, stop_flag=None):
+        """
+        初始化语音识别服务
+
+        Args:
+            stop_flag: 停止标志对象（可选），用于响应用户的停止请求
+        """
+        # 初始化停止标志持有者基类
+        super().__init__(stop_flag)
+
         # 验证API密钥
         if not DASHSCOPE_API_KEY:
             raise ValueError("未配置DASHSCOPE_API_KEY")
@@ -439,6 +448,11 @@ class SpeechToText:
             Exception: 识别失败
             SecurityError: 安全检查失败
         """
+        # 检查停止标志（在开始处理前）
+        if self._check_stop():
+            print("[ASR] 检测到停止请求，终止识别")
+            raise Exception("ASR识别已取消：用户请求停止")
+
         # 1. 参数验证
         if not audio_path or not isinstance(audio_path, str):
             raise ValueError("音频路径参数无效")
@@ -453,10 +467,17 @@ class SpeechToText:
         # 3. 根据配置选择识别方式
         if self.distributed_asr:
             # 使用分布式ASR
-            return self._distributed_recognize(audio_path)
+            result = self._distributed_recognize(audio_path)
         else:
             # 使用单节点ASR（带重试）
-            return self._single_node_with_retry(audio_path)
+            result = self._single_node_with_retry(audio_path)
+
+        # 检查停止标志（在API返回后）
+        if self._check_stop():
+            print("[ASR] 检测到停止请求，丢弃识别结果")
+            raise Exception("ASR识别已取消：用户请求停止")
+
+        return result
 
     def _single_node_with_retry(self, audio_path: str) -> str:
         """

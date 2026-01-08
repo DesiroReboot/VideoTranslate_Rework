@@ -19,6 +19,7 @@ from config import (
 )
 from scores.translation.translation_scores import TranslationScorer, TranslationScore
 from translation_modes import get_translation_mode, mode_manager
+from common.stop_flag import StopFlagHolder
 
 
 @dataclass
@@ -43,22 +44,26 @@ class TranslationConsensus:
     warning: Optional[str] = None  # 警告信息
 
 
-class DistributedTranslation:
-    """分布式翻译服务类"""
+class DistributedTranslation(StopFlagHolder):
+    """分布式翻译服务类（支持停止标志）"""
 
-    def __init__(self, translation_style: str = "auto"):
+    def __init__(self, translation_style: str = "auto", stop_flag=None):
         """
         初始化分布式翻译服务
 
         Args:
             translation_style: 翻译风格
+            stop_flag: 停止标志对象（可选），用于响应用户的停止请求
         """
+        # 初始化停止标志持有者基类
+        super().__init__(stop_flag)
+
         self.style_enum = get_translation_mode(translation_style)
         self.translation_style = mode_manager.get_mode(self.style_enum)
         self.translation_prompt = self._build_translation_prompt_template()
 
-        # 初始化翻译质量评分器
-        self.scorer = TranslationScorer()
+        # 初始化翻译质量评分器（传递停止标志）
+        self.scorer = TranslationScorer(stop_flag=stop_flag)
 
         # 验证并初始化翻译模型
         self.available_models = self._initialize_models()
@@ -388,7 +393,15 @@ class DistributedTranslation:
 
         Returns:
             (翻译文本, 翻译评分)的元组
+
+        Raises:
+            Exception: 翻译失败或用户请求停止
         """
+        # 检查停止标志（在开始处理前）
+        if self._check_stop():
+            print("[翻译] 检测到停止请求，终止翻译")
+            raise Exception("翻译已取消：用户请求停止")
+
         if not text or not isinstance(text, str):
             raise ValueError("源文本参数无效")
 
@@ -400,10 +413,17 @@ class DistributedTranslation:
 
         if ENABLE_DISTRIBUTED_TRANSLATION and len(self.available_models) >= 2:
             # 使用分布式翻译
-            return self._distributed_translate(text, target_language)
+            result = self._distributed_translate(text, target_language)
         else:
             # 使用单模型翻译
-            return self._single_model_translate(text, target_language)
+            result = self._single_model_translate(text, target_language)
+
+        # 检查停止标志（在API返回后）
+        if self._check_stop():
+            print("[翻译] 检测到停止请求，丢弃翻译结果")
+            raise Exception("翻译已取消：用户请求停止")
+
+        return result
 
     def _single_model_translate(
         self, text: str, target_language: str
