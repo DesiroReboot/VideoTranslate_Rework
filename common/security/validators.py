@@ -49,6 +49,30 @@ class PathSecurityValidator:
     """路径安全验证器 - 防止路径遍历攻击"""
 
     @staticmethod
+    def get_project_root() -> str:
+        """
+        获取项目根目录
+
+        通过定位 VideoTranslate_Workflow 目录来确定项目根目录，
+        无论从哪个子目录运行，都能正确找到项目根目录。
+
+        Returns:
+            项目根目录的绝对路径
+        """
+        # 获取当前文件的路径 (validators.py)
+        current_file = Path(__file__).resolve()
+
+        # 向上查找 VideoTranslate_Workflow 目录
+        workflow_dir = current_file
+        for _ in range(3):  # security/validators.py -> security -> common -> VideoTranslate_Workflow
+            workflow_dir = workflow_dir.parent
+
+        # 项目根目录是 VideoTranslate_Workflow 的父目录
+        project_root = workflow_dir.parent
+
+        return str(project_root)
+
+    @staticmethod
     def validate_path_in_project(
         file_path: str, project_root: str, allow_symlinks: bool = False
     ) -> Path:

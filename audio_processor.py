@@ -43,7 +43,7 @@ class AudioProcessor:
                 raise ValueError("视频文件路径参数无效")
 
             # 安全检查2: 路径安全验证
-            project_root = os.getcwd()
+            project_root = PathSecurityValidator.get_project_root()
             PathSecurityValidator.validate_path_in_project(video_path, project_root)
 
             # 安全检查3: 文件名长度限制

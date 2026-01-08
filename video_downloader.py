@@ -111,7 +111,7 @@ class VideoDownloader:
 
         try:
             # 路径安全验证
-            project_root = os.getcwd()
+            project_root = PathSecurityValidator.get_project_root()
             PathSecurityValidator.validate_path_in_project(path, project_root)
 
             # 文件安全验证
@@ -180,7 +180,7 @@ class VideoDownloader:
 
         # 5. 输出路径安全验证
         if output_path:
-            project_root = os.getcwd()
+            project_root = PathSecurityValidator.get_project_root()
             PathSecurityValidator.validate_path_in_project(output_path, project_root)
             output_dir = Path(output_path).parent
             output_dir.mkdir(parents=True, exist_ok=True)
