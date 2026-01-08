@@ -17,6 +17,7 @@ from config import (
 )
 from translation_modes import VideoStyle, get_translation_mode
 from common.security import LLMOutputValidator, OutputValidationError
+from common.stop_flag import StopFlagHolder
 
 
 @dataclass
@@ -35,11 +36,19 @@ class TranslationScore:  # pylint:disable-too-many-positional-attributes
     detailed_feedback: str  # 详细反馈
 
 
-class TranslationScorer:  # pylint: disable=too-many-instance-attributes
-    """翻译质量评分器"""
+class TranslationScorer(StopFlagHolder):  # pylint: disable=too-many-instance-attributes
+    """翻译质量评分器（支持停止标志）"""
 
-    def __init__(self):
-        """初始化评分器"""
+    def __init__(self, stop_flag=None):
+        """
+        初始化评分器
+
+        Args:
+            stop_flag: 停止标志对象（可选），用于响应用户的停止请求
+        """
+        # 初始化停止标志持有者基类
+        super().__init__(stop_flag)
+
         # 初始化OpenAI客户端
         self.client = OpenAI(
             api_key=DASHSCOPE_API_KEY,
@@ -119,7 +128,15 @@ class TranslationScorer:  # pylint: disable=too-many-instance-attributes
 
         Returns:
             TranslationScore: 评分结果
+
+        Raises:
+            Exception: 评分失败或用户请求停止
         """
+        # 检查停止标志（在开始处理前）
+        if self._check_stop():
+            print("[评分] 检测到停止请求，终止评分")
+            raise Exception("评分已取消：用户请求停止")
+
         print("\n[评分] 开始评价翻译质量...")
         print(f"[评分] 源语言: {source_language}, 目标语言: {target_language}")
         print(f"[评分] 翻译风格: {translation_style}")
