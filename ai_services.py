@@ -1015,7 +1015,15 @@ class AIServices:
                 )
 
         except Exception as e:
-            raise Exception(f"语音合成失败: {str(e)}")
+            error_message = str(e)
+            print(f"[TTS] 原始错误: {error_message}")
+            # 检查错误是否与字符长度相关
+            if self._is_length_related_error(error_message):
+                print(f"[TTS] 检测到字符长度相关错误: {error_message}")
+                print("[TTS] 尝试使用二分法重新处理文本")
+                return self._try_bisect_synthesis(text, voice, language, output_path)
+            else:
+                raise Exception(f"语音合成失败: {error_message}") from e
 
     def _synthesize_single(
         self, text: str, voice: str, language: str, output_path: Optional[str] = None
@@ -1133,3 +1141,59 @@ class AIServices:
                     print(f"[TTS] 警告: 无法删除临时文件 {temp_path}: {e}")
 
         return output_path
+
+    def _is_length_related_error(self, error_message: str) -> bool:
+        """检查错误是否与字符长度相关"""
+        length_keywords = ["length", "字符", "太长", "too long", "exceed", "limit", "超过"]
+        error_lower = error_message.lower()
+        return any(keyword in error_lower for keyword in length_keywords)
+
+    def _try_bisect_synthesis(self, text: str, voice: Optional[str], language: str, output_path: Optional[str]) -> str:
+        """使用二分法尝试合成文本"""
+        if len(text) < 2:
+            raise Exception(f"文本过短无法二分: {text[:50]}...")
+
+        mid = len(text) // 2
+        text1 = text[:mid].strip()
+        text2 = text[mid:].strip()
+
+        print(f"[TTS] 二分法处理: 第一段 {len(text1)} 字符, 第二段 {len(text2)} 字符")
+
+        # 确保 voice 不是 None
+        if not voice:
+            voice = TTS_VOICE_MAP.get(language, DEFAULT_VOICE)
+
+        # 生成临时文件路径
+        timestamp = int(time.time())
+        temp_path1 = str(TEMP_DIR / f"tts_bisect_1_{timestamp}.wav")
+        temp_path2 = str(TEMP_DIR / f"tts_bisect_2_{timestamp}.wav")
+
+        try:
+            # 分别合成两段文本
+            audio_path1 = self._synthesize_single(text1, voice, language, temp_path1)
+            audio_path2 = self._synthesize_single(text2, voice, language, temp_path2)
+
+            # 合并音频
+            segment1 = AudioSegment.from_wav(audio_path1)
+            segment2 = AudioSegment.from_wav(audio_path2)
+            combined = segment1 + segment2
+
+            # 保存合并后的音频
+            if not output_path:
+                output_path = str(TEMP_DIR / f"translated_audio_{timestamp}.wav")
+
+            combined.export(output_path, format="wav")
+            print(f"[TTS] 二分法合成成功: {output_path}")
+
+            return output_path
+
+        except Exception as e:
+            # 清理临时文件
+            for temp_path in [temp_path1, temp_path2]:
+                try:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except:
+                    pass
+            raise Exception(f"二分法合成失败: {str(e)}") from e
+
